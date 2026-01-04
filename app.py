@@ -1,8 +1,11 @@
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, send_file
 import requests
 import json
 import os
 import re
+import base64
+from io import BytesIO
+import time
 
 app = Flask(__name__)
 
@@ -11,37 +14,44 @@ conversations = {}
 
 # API endpoints
 OPUS_API = 'https://chatbot-ji1z.onrender.com/chatbot-ji1z'
-GPT5_PRO_API = 'https://chatbot-ji1z.onrender.com/chatbot-ji1z'  # Same backend, different prompting
+GPT5_PRO_API = 'https://chatbot-ji1z.onrender.com/chatbot-ji1z'
+IMAGE_GEN_API = 'https://api-inference.huggingface.co/models/stabilityai/stable-diffusion-3.5-large'
+
+def detect_request_type(message):
+    """Detect if request is for image generation or text chat"""
+    message_lower = message.lower()
+    
+    image_keywords = [
+        'generate image', 'create image', 'make image', 'draw', 'paint',
+        'generate picture', 'create picture', 'visualize', 'illustrate',
+        'image of', 'picture of', 'photo of', 'render', 'design image',
+        'बनाओ तस्वीर', 'तस्वीर बनाओ', 'फोटो बनाओ', 'इमेज बनाओ'
+    ]
+    
+    for keyword in image_keywords:
+        if keyword in message_lower:
+            return 'image'
+    
+    return 'text'
 
 def detect_query_type(question):
-    """Intelligent query type detection - Decides which API to use"""
+    """Intelligent query type detection for text chat"""
     question_lower = question.lower()
     
-    # GPT-5 Pro equivalent triggers (Complex, Critical, High-Precision)
     gpt5_pro_keywords = [
-        # Coding & Development
         'code', 'debug', 'algorithm', 'implement', 'function', 'class', 'api',
         'programming', 'software', 'develop', 'build', 'create app', 'script',
         'refactor', 'optimize', 'bug', 'error', 'python', 'javascript', 'react',
-        
-        # Research & Analysis
         'research', 'analyze', 'analysis', 'study', 'investigate', 'examine',
         'compare', 'evaluate', 'review', 'assess', 'scientific', 'academic',
-        
-        # Complex Reasoning
         'solve', 'calculate', 'compute', 'mathematical', 'proof', 'logic',
         'reasoning', 'explain complex', 'detailed explanation', 'step by step',
-        
-        # Professional Tasks
         'legal', 'medical', 'financial', 'business plan', 'strategy',
         'technical document', 'architecture', 'design system',
-        
-        # Long-form Content
         'essay', 'article', 'report', 'documentation', 'proposal',
         'comprehensive', 'detailed', 'in-depth'
     ]
     
-    # Opus 4.5 equivalent triggers (General, Fast, Conversational)
     opus_keywords = [
         'hello', 'hi', 'hey', 'what is', 'tell me about', 'explain',
         'simple', 'quick', 'summary', 'summarize', 'brief',
@@ -49,42 +59,99 @@ def detect_query_type(question):
         'general', 'basic', 'simple question'
     ]
     
-    # Check for GPT-5 Pro triggers
     gpt5_score = sum(1 for keyword in gpt5_pro_keywords if keyword in question_lower)
     opus_score = sum(1 for keyword in opus_keywords if keyword in question_lower)
     
-    # Length-based detection
     word_count = len(question.split())
-    if word_count > 50:  # Long queries need GPT-5 Pro
+    if word_count > 50:
         gpt5_score += 2
     
-    # Code detection
     if '```' in question or 'def ' in question or 'function' in question:
         gpt5_score += 3
     
-    # Question complexity
-    if '?' in question:
-        question_marks = question.count('?')
-        if question_marks > 2:  # Multiple questions
-            gpt5_score += 1
+    if '?' in question and question.count('?') > 2:
+        gpt5_score += 1
     
-    # Decision
-    if gpt5_score > opus_score:
-        return 'gpt5-pro'
-    else:
-        return 'opus-4.5'
+    return 'gpt5-pro' if gpt5_score > opus_score else 'opus-4.5'
+
+def clean_prompt(message):
+    """Extract clean prompt for image generation"""
+    message_lower = message.lower()
+    
+    # Remove trigger phrases
+    triggers = [
+        'generate image of', 'create image of', 'make image of',
+        'generate picture of', 'create picture of', 'draw',
+        'paint', 'image of', 'picture of', 'photo of',
+        'बनाओ तस्वीर', 'तस्वीर बनाओ', 'फोटो बनाओ'
+    ]
+    
+    prompt = message
+    for trigger in triggers:
+        if trigger in message_lower:
+            # Find trigger position and extract after it
+            idx = message_lower.find(trigger)
+            prompt = message[idx + len(trigger):].strip()
+            break
+    
+    return prompt
+
+def generate_image_sd35(prompt):
+    """Generate image using Stable Diffusion 3.5 Large (Free API)"""
+    try:
+        # Using free Hugging Face Inference API
+        headers = {
+            "Content-Type": "application/json"
+        }
+        
+        payload = {
+            "inputs": prompt,
+            "parameters": {
+                "num_inference_steps": 30,
+                "guidance_scale": 7.5,
+                "negative_prompt": "blurry, low quality, distorted, ugly"
+            }
+        }
+        
+        # Try Hugging Face API
+        response = requests.post(
+            IMAGE_GEN_API,
+            headers=headers,
+            json=payload,
+            timeout=60
+        )
+        
+        if response.status_code == 200:
+            # Image returned as binary
+            image_bytes = response.content
+            # Convert to base64
+            img_base64 = base64.b64encode(image_bytes).decode('utf-8')
+            return {
+                "success": True,
+                "image": img_base64,
+                "format": "base64",
+                "model": "stable-diffusion-3.5-large"
+            }
+        else:
+            return {
+                "success": False,
+                "error": f"API Error: {response.status_code}",
+                "message": "Image generation service temporarily unavailable"
+            }
+            
+    except Exception as e:
+        return {
+            "success": False,
+            "error": str(e),
+            "message": "Failed to generate image"
+        }
 
 def get_opus_response(question, conversation_history=[]):
     """Opus 4.5 equivalent - Fast, general queries"""
     messages = []
-    
     for msg in conversation_history:
         messages.append(msg)
-    
-    messages.append({
-        'role': 'user',
-        'content': question
-    })
+    messages.append({'role': 'user', 'content': question})
     
     payload = {'messages': messages}
     headers = {
@@ -106,7 +173,6 @@ def get_gpt5_pro_response(question, conversation_history=[]):
     """GPT-5 Pro equivalent - Complex, detailed queries"""
     messages = []
     
-    # Add system prompt for enhanced reasoning
     system_prompt = (
         "You are an advanced AI assistant with GPT-5 Pro level capabilities. "
         "Provide detailed, accurate, and well-reasoned responses. "
@@ -115,23 +181,12 @@ def get_gpt5_pro_response(question, conversation_history=[]):
         "Think step-by-step and show your reasoning when appropriate."
     )
     
-    messages.append({
-        'role': 'assistant',
-        'content': system_prompt
-    })
-    
+    messages.append({'role': 'assistant', 'content': system_prompt})
     for msg in conversation_history:
         messages.append(msg)
     
-    # Enhanced question with reasoning trigger
-    enhanced_question = (
-        f"Please provide a detailed, comprehensive response with step-by-step reasoning: {question}"
-    )
-    
-    messages.append({
-        'role': 'user',
-        'content': enhanced_question
-    })
+    enhanced_question = f"Please provide a detailed, comprehensive response: {question}"
+    messages.append({'role': 'user', 'content': enhanced_question})
     
     payload = {'messages': messages}
     headers = {
@@ -154,32 +209,35 @@ def home():
     """Home endpoint - API status"""
     return jsonify({
         "status": "active",
-        "message": "Intelligent Dual AI API Router",
+        "message": "Triple AI API Router - Chat + Image Generation",
         "models": {
-            "opus-4.5": "Fast, general queries",
-            "gpt5-pro": "Complex, detailed tasks"
+            "opus-4.5": "Fast text chat",
+            "gpt5-pro": "Complex text tasks",
+            "stable-diffusion-3.5-large": "Image generation"
         },
-        "version": "2.0",
+        "version": "3.0",
         "endpoints": {
             "/": "GET - API status",
-            "/chat": "POST - Intelligent chat routing",
+            "/chat": "POST - Intelligent routing (text/image)",
+            "/generate-image": "POST - Direct image generation",
             "/chat/opus": "POST - Force Opus 4.5",
             "/chat/gpt5pro": "POST - Force GPT-5 Pro",
             "/reset": "POST - Reset conversation",
             "/health": "GET - Health check"
         },
         "features": [
-            "Intelligent query routing",
-            "Dual model support",
+            "Intelligent text/image routing",
+            "Triple model support",
+            "Stable Diffusion 3.5 Large",
             "Conversation history",
             "Free to use",
-            "Auto model selection"
+            "Auto detection"
         ]
     })
 
 @app.route('/chat', methods=['POST'])
 def chat():
-    """Intelligent chat endpoint - Auto-selects best model"""
+    """Intelligent chat endpoint - Auto-detects text or image request"""
     try:
         data = request.json
         
@@ -188,74 +246,115 @@ def chat():
         
         user_message = data.get('message', '').strip()
         user_id = data.get('user_id', 'default')
-        force_model = data.get('model', None)  # Optional: 'opus' or 'gpt5pro'
+        force_model = data.get('model', None)
         
         if not user_message:
             return jsonify({"error": "Message field is required."}), 400
         
-        # Get or create conversation history
-        if user_id not in conversations:
-            conversations[user_id] = []
+        # Detect if image generation or text chat
+        request_type = detect_request_type(user_message)
         
-        # Intelligent model selection
-        if force_model:
-            selected_model = force_model
+        if request_type == 'image':
+            # Image generation request
+            prompt = clean_prompt(user_message)
+            result = generate_image_sd35(prompt)
+            
+            if result['success']:
+                return jsonify({
+                    "success": True,
+                    "type": "image",
+                    "image": result['image'],
+                    "format": "base64",
+                    "model_used": "stable-diffusion-3.5-large",
+                    "prompt": prompt,
+                    "message": "Image generated successfully! Decode base64 to view."
+                })
+            else:
+                return jsonify({
+                    "success": False,
+                    "error": result.get('error'),
+                    "message": result.get('message')
+                }), 500
+        
         else:
-            selected_model = detect_query_type(user_message)
-        
-        # Get response from selected model
-        if selected_model == 'gpt5-pro':
-            response_text = get_gpt5_pro_response(user_message, conversations[user_id])
-        else:
-            response_text = get_opus_response(user_message, conversations[user_id])
-        
-        # Check for errors
-        if response_text.startswith("Error:"):
+            # Text chat request
+            if user_id not in conversations:
+                conversations[user_id] = []
+            
+            if force_model:
+                selected_model = force_model
+            else:
+                selected_model = detect_query_type(user_message)
+            
+            if selected_model == 'gpt5-pro':
+                response_text = get_gpt5_pro_response(user_message, conversations[user_id])
+            else:
+                response_text = get_opus_response(user_message, conversations[user_id])
+            
+            if response_text.startswith("Error:"):
+                return jsonify({"success": False, "error": response_text}), 500
+            
+            conversations[user_id].append({"role": "user", "content": user_message})
+            conversations[user_id].append({"role": "assistant", "content": response_text})
+            
+            input_tokens = len(user_message.split())
+            output_tokens = len(response_text.split())
+            
             return jsonify({
-                "success": False,
-                "error": response_text
-            }), 500
-        
-        # Add to conversation history
-        conversations[user_id].append({
-            "role": "user",
-            "content": user_message
-        })
-        conversations[user_id].append({
-            "role": "assistant",
-            "content": response_text
-        })
-        
-        # Token estimation
-        input_tokens = len(user_message.split())
-        output_tokens = len(response_text.split())
-        
-        return jsonify({
-            "success": True,
-            "response": response_text,
-            "model_used": selected_model,
-            "user_id": user_id,
-            "usage": {
-                "input_tokens": input_tokens,
-                "output_tokens": output_tokens,
-                "total_tokens": input_tokens + output_tokens
-            },
-            "conversation_length": len(conversations[user_id]),
-            "routing_info": {
-                "auto_selected": force_model is None,
-                "reason": "Intelligent query analysis" if force_model is None else "User forced"
-            }
-        })
+                "success": True,
+                "type": "text",
+                "response": response_text,
+                "model_used": selected_model,
+                "user_id": user_id,
+                "usage": {
+                    "input_tokens": input_tokens,
+                    "output_tokens": output_tokens,
+                    "total_tokens": input_tokens + output_tokens
+                },
+                "conversation_length": len(conversations[user_id])
+            })
         
     except Exception as e:
-        return jsonify({
-            "success": False,
-            "error": f"Server error: {str(e)}"
-        }), 500
+        return jsonify({"success": False, "error": f"Server error: {str(e)}"}), 500
+
+@app.route('/generate-image', methods=['POST'])
+def generate_image():
+    """Direct image generation endpoint"""
+    try:
+        data = request.json
+        
+        if not data:
+            return jsonify({"error": "JSON body required"}), 400
+        
+        prompt = data.get('prompt', '').strip()
+        
+        if not prompt:
+            return jsonify({"error": "Prompt field is required"}), 400
+        
+        result = generate_image_sd35(prompt)
+        
+        if result['success']:
+            return jsonify({
+                "success": True,
+                "image": result['image'],
+                "format": "base64",
+                "model": "stable-diffusion-3.5-large",
+                "prompt": prompt,
+                "message": "Image generated! Decode base64 to view."
+            })
+        else:
+            return jsonify({
+                "success": False,
+                "error": result.get('error'),
+                "message": result.get('message')
+            }), 500
+            
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500
 
 @app.route('/chat/opus', methods=['POST'])
 def chat_opus():
-    """Force Opus 4.5 equivalent"""
+    """Force Opus 4.5"""
     data = request.json if request.json else {}
     data['model'] = 'opus-4.5'
     request.json = data
@@ -263,7 +362,7 @@ def chat_opus():
 
 @app.route('/chat/gpt5pro', methods=['POST'])
 def chat_gpt5pro():
-    """Force GPT-5 Pro equivalent"""
+    """Force GPT-5 Pro"""
     data = request.json if request.json else {}
     data['model'] = 'gpt5-pro'
     request.json = data
@@ -290,23 +389,20 @@ def reset_conversation():
                 "message": "No conversation history found.",
                 "user_id": user_id
             })
-            
     except Exception as e:
-        return jsonify({
-            "success": False,
-            "error": str(e)
-        }), 500
+        return jsonify({"success": False, "error": str(e)}), 500
 
 @app.route('/health', methods=['GET'])
 def health_check():
-    """Health check endpoint"""
+    """Health check"""
     return jsonify({
         "status": "healthy",
         "active_users": len(conversations),
         "total_conversations": sum(len(conv) for conv in conversations.values()),
         "models": {
             "opus-4.5": "Available",
-            "gpt5-pro": "Available"
+            "gpt5-pro": "Available",
+            "stable-diffusion-3.5": "Available"
         }
     })
 
