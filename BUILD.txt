@@ -1,0 +1,3 @@
+# Trigger: 2026-01-04 17:19:34 UTC
+# Fresh build with minimal dependencies
+# Pure Python only - No C dependencies
