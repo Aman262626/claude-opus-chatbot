@@ -13,27 +13,33 @@ from docx import Document
 import pandas as pd
 import google.generativeai as genai
 from werkzeug.utils import secure_filename
+from langdetect import detect, LangDetectException
+import pytz
 
 app = Flask(__name__)
 
-# Configure upload settings
-app.config['MAX_CONTENT_LENGTH'] = 50 * 1024 * 1024  # 50MB max file size
+# UNLIMITED CONFIGURATION - No Restrictions!
+app.config['MAX_CONTENT_LENGTH'] = None  # Unlimited file size
 UPLOAD_FOLDER = '/tmp/uploads'
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 
 # Enhanced conversation storage with metadata
 conversations = {}
-# Format: {user_id: {"messages": [], "context": {}, "metadata": {}}}
 
-# Conversation configuration
-MAX_CONVERSATION_LENGTH = 50  # Maximum messages per conversation
-CONTEXT_WINDOW = 10  # Number of recent messages to use for context
+# UNLIMITED CONVERSATION SETTINGS
+MAX_CONVERSATION_LENGTH = None  # Unlimited messages
+CONTEXT_WINDOW = 20  # Increased context window
 
 # API endpoints
 OPUS_API = 'https://chatbot-ji1z.onrender.com/chatbot-ji1z'
 GPT5_PRO_API = 'https://chatbot-ji1z.onrender.com/chatbot-ji1z'
 IMAGE_GEN_API = 'https://api-inference.huggingface.co/models/stabilityai/stable-diffusion-3.5-large'
 VIDEO_GEN_API = 'https://api-inference.huggingface.co/models/ali-vilab/text-to-video-ms-1.7b'
+
+# Real-time Data APIs
+NEWSAPI_KEY = os.environ.get('NEWSAPI_KEY', '')
+WEATHER_API_KEY = os.environ.get('WEATHER_API_KEY', '')
+EXCHANGE_API_KEY = os.environ.get('EXCHANGE_API_KEY', '')
 
 # Configure Gemini for file analysis
 GEMINI_API_KEY = os.environ.get('GEMINI_API_KEY', '')
@@ -43,13 +49,218 @@ if GEMINI_API_KEY:
 else:
     gemini_model = None
 
-# Allowed file extensions
+# Allowed file extensions - UNLIMITED
 ALLOWED_EXTENSIONS = {
-    'image': {'png', 'jpg', 'jpeg', 'gif', 'bmp', 'webp'},
-    'document': {'pdf', 'doc', 'docx', 'txt'},
-    'spreadsheet': {'xlsx', 'xls', 'csv'},
-    'all': {'png', 'jpg', 'jpeg', 'gif', 'bmp', 'webp', 'pdf', 'doc', 'docx', 'txt', 'xlsx', 'xls', 'csv'}
+    'image': {'png', 'jpg', 'jpeg', 'gif', 'bmp', 'webp', 'svg', 'tiff', 'ico'},
+    'document': {'pdf', 'doc', 'docx', 'txt', 'rtf', 'odt', 'md'},
+    'spreadsheet': {'xlsx', 'xls', 'csv', 'ods'},
+    'code': {'py', 'js', 'java', 'cpp', 'c', 'html', 'css', 'json', 'xml'},
+    'all': {'png', 'jpg', 'jpeg', 'gif', 'bmp', 'webp', 'svg', 'tiff', 'ico',
+            'pdf', 'doc', 'docx', 'txt', 'rtf', 'odt', 'md',
+            'xlsx', 'xls', 'csv', 'ods',
+            'py', 'js', 'java', 'cpp', 'c', 'html', 'css', 'json', 'xml'}
 }
+
+# Multi-Language Support
+SUPPORTED_LANGUAGES = {
+    'en': 'English',
+    'hi': 'Hindi',
+    'hi-en': 'Hinglish',
+    'es': 'Spanish',
+    'fr': 'French',
+    'de': 'German',
+    'ja': 'Japanese',
+    'ko': 'Korean',
+    'zh': 'Chinese',
+    'ar': 'Arabic',
+    'ru': 'Russian',
+    'pt': 'Portuguese',
+    'it': 'Italian'
+}
+
+def detect_language(text):
+    """Detect language of text with Hinglish support"""
+    try:
+        # Check for Hinglish patterns
+        hindi_chars = len(re.findall(r'[\u0900-\u097F]', text))
+        english_chars = len(re.findall(r'[a-zA-Z]', text))
+        
+        if hindi_chars > 0 and english_chars > 0:
+            return 'hi-en'  # Hinglish
+        elif hindi_chars > english_chars:
+            return 'hi'  # Hindi
+        
+        # Use langdetect for other languages
+        lang = detect(text)
+        return lang if lang in SUPPORTED_LANGUAGES else 'en'
+    except:
+        return 'en'
+
+def get_current_time_info():
+    """Get current date, time, and day with IST timezone"""
+    ist = pytz.timezone('Asia/Kolkata')
+    now = datetime.now(ist)
+    
+    return {
+        'date': now.strftime('%Y-%m-%d'),
+        'time': now.strftime('%H:%M:%S'),
+        'day': now.strftime('%A'),
+        'timestamp': now.isoformat(),
+        'timezone': 'IST',
+        'formatted': now.strftime('%d %B %Y, %I:%M %p IST')
+    }
+
+def fetch_real_time_news(query='latest', country='in', language='en'):
+    """Fetch real-time news from NewsAPI"""
+    try:
+        if not NEWSAPI_KEY:
+            return None
+        
+        url = f'https://newsapi.org/v2/top-headlines?country={country}&q={query}&apiKey={NEWSAPI_KEY}'
+        response = requests.get(url, timeout=10)
+        
+        if response.status_code == 200:
+            data = response.json()
+            articles = data.get('articles', [])[:5]
+            
+            news_summary = []
+            for article in articles:
+                news_summary.append({
+                    'title': article.get('title'),
+                    'description': article.get('description'),
+                    'source': article.get('source', {}).get('name'),
+                    'url': article.get('url'),
+                    'published': article.get('publishedAt')
+                })
+            
+            return news_summary
+        return None
+    except:
+        return None
+
+def fetch_weather_data(city='Lucknow'):
+    """Fetch real-time weather data"""
+    try:
+        if not WEATHER_API_KEY:
+            return None
+        
+        url = f'http://api.openweathermap.org/data/2.5/weather?q={city}&appid={WEATHER_API_KEY}&units=metric'
+        response = requests.get(url, timeout=10)
+        
+        if response.status_code == 200:
+            data = response.json()
+            return {
+                'city': data.get('name'),
+                'temperature': data['main']['temp'],
+                'feels_like': data['main']['feels_like'],
+                'humidity': data['main']['humidity'],
+                'description': data['weather'][0]['description'],
+                'wind_speed': data['wind']['speed']
+            }
+        return None
+    except:
+        return None
+
+def fetch_crypto_prices():
+    """Fetch real-time cryptocurrency prices"""
+    try:
+        url = 'https://api.coingecko.com/api/v3/simple/price?ids=bitcoin,ethereum,dogecoin&vs_currencies=usd,inr'
+        response = requests.get(url, timeout=10)
+        
+        if response.status_code == 200:
+            return response.json()
+        return None
+    except:
+        return None
+
+def search_web(query, num_results=5):
+    """Search the web for real-time information"""
+    try:
+        # Using DuckDuckGo Instant Answer API (no API key needed)
+        url = f'https://api.duckduckgo.com/?q={query}&format=json&no_html=1'
+        response = requests.get(url, timeout=10)
+        
+        if response.status_code == 200:
+            data = response.json()
+            
+            results = {
+                'abstract': data.get('AbstractText', ''),
+                'source': data.get('AbstractSource', ''),
+                'url': data.get('AbstractURL', ''),
+                'related': []
+            }
+            
+            for topic in data.get('RelatedTopics', [])[:num_results]:
+                if 'Text' in topic:
+                    results['related'].append({
+                        'text': topic.get('Text'),
+                        'url': topic.get('FirstURL', '')
+                    })
+            
+            return results
+        return None
+    except:
+        return None
+
+def check_for_real_time_query(message):
+    """Check if message requires real-time data"""
+    message_lower = message.lower()
+    
+    # Time/Date queries
+    time_keywords = ['time', 'date', 'day', 'today', 'now', 'current', 'समय', 'तारीख', 'आज']
+    
+    # News queries
+    news_keywords = ['news', 'latest', 'breaking', 'headlines', 'समाचार', 'खबर']
+    
+    # Weather queries
+    weather_keywords = ['weather', 'temperature', 'climate', 'मौसम', 'तापमान']
+    
+    # Crypto queries
+    crypto_keywords = ['bitcoin', 'ethereum', 'crypto', 'cryptocurrency', 'btc', 'eth']
+    
+    # Search queries
+    search_keywords = ['search', 'find', 'lookup', 'what is', 'who is', 'खोजो', 'ढूंढो']
+    
+    if any(keyword in message_lower for keyword in time_keywords):
+        return 'time'
+    elif any(keyword in message_lower for keyword in news_keywords):
+        return 'news'
+    elif any(keyword in message_lower for keyword in weather_keywords):
+        return 'weather'
+    elif any(keyword in message_lower for keyword in crypto_keywords):
+        return 'crypto'
+    elif any(keyword in message_lower for keyword in search_keywords):
+        return 'search'
+    
+    return None
+
+def get_real_time_data(query_type, message):
+    """Fetch real-time data based on query type"""
+    data = {}
+    
+    if query_type == 'time':
+        data['time_info'] = get_current_time_info()
+    
+    elif query_type == 'news':
+        # Extract topic from message
+        topic = re.sub(r'(news|latest|breaking|headlines|about|समाचार|खबर)', '', message.lower()).strip()
+        data['news'] = fetch_real_time_news(topic if topic else 'latest')
+    
+    elif query_type == 'weather':
+        # Extract city from message
+        city_match = re.search(r'in ([a-zA-Z\s]+)', message.lower())
+        city = city_match.group(1) if city_match else 'Lucknow'
+        data['weather'] = fetch_weather_data(city)
+    
+    elif query_type == 'crypto':
+        data['crypto'] = fetch_crypto_prices()
+    
+    elif query_type == 'search':
+        # Extract search query
+        search_query = re.sub(r'(search|find|lookup|what is|who is|खोजो|ढूंढो)', '', message.lower()).strip()
+        data['search_results'] = search_web(search_query)
+    
+    return data
 
 def init_conversation(user_id):
     """Initialize a new conversation for a user"""
@@ -59,17 +270,20 @@ def init_conversation(user_id):
             "context": {
                 "topics": [],
                 "entities": [],
-                "last_intent": None
+                "last_intent": None,
+                "language": 'en',
+                "location": None
             },
             "metadata": {
                 "created_at": datetime.now().isoformat(),
                 "last_active": datetime.now().isoformat(),
                 "message_count": 0,
-                "user_preferences": {}
+                "user_preferences": {},
+                "total_tokens": 0
             }
         }
 
-def update_conversation_context(user_id, message, response):
+def update_conversation_context(user_id, message, response, language='en'):
     """Update conversation context with new information"""
     if user_id not in conversations:
         init_conversation(user_id)
@@ -80,29 +294,36 @@ def update_conversation_context(user_id, message, response):
     conv["messages"].append({
         "role": "user",
         "content": message,
-        "timestamp": datetime.now().isoformat()
+        "timestamp": datetime.now().isoformat(),
+        "language": language
     })
     conv["messages"].append({
         "role": "assistant",
         "content": response,
-        "timestamp": datetime.now().isoformat()
+        "timestamp": datetime.now().isoformat(),
+        "language": language
     })
     
-    # Keep only recent messages (sliding window)
-    if len(conv["messages"]) > MAX_CONVERSATION_LENGTH:
-        conv["messages"] = conv["messages"][-MAX_CONVERSATION_LENGTH:]
+    # NO LIMIT - Keep all messages
+    # Previous limit removed for unlimited conversation history
     
     # Extract and update context
     message_lower = message.lower()
     
+    # Update language preference
+    conv["context"]["language"] = language
+    
     # Detect topics
     topic_keywords = {
-        'coding': ['code', 'programming', 'function', 'algorithm', 'debug'],
-        'data_analysis': ['data', 'analysis', 'chart', 'graph', 'statistics'],
-        'creative': ['image', 'video', 'design', 'creative', 'art'],
-        'document': ['pdf', 'document', 'text', 'file', 'extract'],
-        'medical': ['medical', 'health', 'disease', 'diagnosis', 'xray'],
-        'business': ['business', 'finance', 'market', 'strategy', 'revenue']
+        'coding': ['code', 'programming', 'function', 'algorithm', 'debug', 'कोड', 'प्रोग्रामिंग'],
+        'data_analysis': ['data', 'analysis', 'chart', 'graph', 'statistics', 'डेटा', 'विश्लेषण'],
+        'creative': ['image', 'video', 'design', 'creative', 'art', 'तस्वीर', 'वीडियो'],
+        'document': ['pdf', 'document', 'text', 'file', 'extract', 'दस्तावेज़'],
+        'medical': ['medical', 'health', 'disease', 'diagnosis', 'xray', 'स्वास्थ्य'],
+        'business': ['business', 'finance', 'market', 'strategy', 'revenue', 'व्यापार'],
+        'education': ['learn', 'study', 'teach', 'course', 'सीखना', 'पढ़ाई'],
+        'news': ['news', 'current', 'latest', 'समाचार', 'खबर'],
+        'weather': ['weather', 'temperature', 'climate', 'मौसम']
     }
     
     for topic, keywords in topic_keywords.items():
@@ -120,7 +341,7 @@ def get_conversation_context(user_id):
         return []
     
     conv = conversations[user_id]
-    recent_messages = conv["messages"][-CONTEXT_WINDOW:]
+    recent_messages = conv["messages"][-CONTEXT_WINDOW:] if CONTEXT_WINDOW else conv["messages"]
     
     # Convert to API format
     context_messages = []
@@ -140,11 +361,12 @@ def get_conversation_summary(user_id):
     conv = conversations[user_id]
     topics = conv["context"]["topics"]
     msg_count = conv["metadata"]["message_count"]
+    language = conv["context"]["language"]
     
     if msg_count == 0:
         return "No messages yet."
     
-    summary = f"Conversation has {msg_count} messages."
+    summary = f"Conversation has {msg_count} messages in {SUPPORTED_LANGUAGES.get(language, 'English')}."
     if topics:
         summary += f" Topics discussed: {', '.join(topics)}."
     
@@ -161,6 +383,8 @@ def get_file_type(filename):
         return 'document'
     elif ext in ALLOWED_EXTENSIONS['spreadsheet']:
         return 'spreadsheet'
+    elif ext in ALLOWED_EXTENSIONS['code']:
+        return 'code'
     return 'unknown'
 
 def extract_text_from_pdf(file_path):
@@ -229,11 +453,12 @@ def analyze_document_with_ai(text, question="Analyze this document and provide k
     """Analyze document text using AI"""
     try:
         if gemini_model:
-            prompt = f"{question}\n\nDocument Content:\n{text[:10000]}"
+            # NO LIMIT on text length
+            prompt = f"{question}\n\nDocument Content:\n{text}"
             response = gemini_model.generate_content(prompt)
             return response.text
         else:
-            return get_gpt5_pro_response(f"{question}\n\nDocument: {text[:5000]}")
+            return get_gpt5_pro_response(f"{question}\n\nDocument: {text}")
     except Exception as e:
         return f"We're experiencing a temporary issue with document analysis: {str(e)}. Please try again shortly."
 
@@ -419,9 +644,19 @@ def generate_image_sd35(prompt):
             "message": f"We're unable to complete your image generation request at this time: {str(e)}. Please try again."
         }
 
-def get_opus_response(question, conversation_history=[]):
-    """Opus 4.5 - Fast, general queries with context"""
+def get_opus_response(question, conversation_history=[], language='en', real_time_data=None):
+    """Opus 4.5 - Fast, general queries with context and real-time data"""
     messages = []
+    
+    # Add system context with current time and language
+    time_info = get_current_time_info()
+    system_context = f"Current Date & Time: {time_info['formatted']}. User language preference: {SUPPORTED_LANGUAGES.get(language, 'English')}."
+    
+    if real_time_data:
+        system_context += f"\n\nReal-time Data: {json.dumps(real_time_data, indent=2)}"
+    
+    messages.append({'role': 'system', 'content': system_context})
+    
     for msg in conversation_history:
         messages.append(msg)
     messages.append({'role': 'user', 'content': question})
@@ -442,20 +677,30 @@ def get_opus_response(question, conversation_history=[]):
     except Exception as e:
         return f"Our chat service is temporarily unavailable: {str(e)}. We're working to restore it promptly."
 
-def get_gpt5_pro_response(question, conversation_history=[]):
-    """GPT-5 Pro - Complex, detailed queries with context"""
+def get_gpt5_pro_response(question, conversation_history=[], language='en', real_time_data=None):
+    """GPT-5 Pro - Complex, detailed queries with context and real-time data"""
     messages = []
     
+    # Add system context with current time and language
+    time_info = get_current_time_info()
+    
     system_prompt = (
-        "You are an elite AI assistant powered by advanced GPT-5 Pro architecture. "
-        "Deliver exceptional, comprehensive responses with precision and clarity. "
-        "For technical implementations, provide production-grade solutions following industry best practices. "
-        "For analytical tasks, offer deep insights supported by logical reasoning and examples. "
-        "Maintain a professional yet approachable tone that reflects premium service quality. "
-        "Remember context from previous messages to provide coherent, contextual responses."
+        f"You are an elite AI assistant powered by advanced GPT-5 Pro architecture. "
+        f"Current Date & Time: {time_info['formatted']}. "
+        f"User language preference: {SUPPORTED_LANGUAGES.get(language, 'English')}. "
+        f"Deliver exceptional, comprehensive responses with precision and clarity. "
+        f"For technical implementations, provide production-grade solutions following industry best practices. "
+        f"For analytical tasks, offer deep insights supported by logical reasoning and examples. "
+        f"Maintain a professional yet approachable tone that reflects premium service quality. "
+        f"Remember context from previous messages to provide coherent, contextual responses. "
+        f"Use real-time data when available to provide accurate, up-to-date information."
     )
     
+    if real_time_data:
+        system_prompt += f"\n\nReal-time Data Available: {json.dumps(real_time_data, indent=2)}"
+    
     messages.append({'role': 'assistant', 'content': system_prompt})
+    
     for msg in conversation_history:
         messages.append(msg)
     
@@ -483,54 +728,157 @@ def home():
     """Home endpoint - API status"""
     return jsonify({
         "status": "operational",
-        "message": "Welcome to Premium Multi-Modal AI Platform - Enterprise-Grade Intelligence at Your Fingertips",
-        "tagline": "Unleashing the Future of AI - Text, Vision, Video & Analytics Unified",
+        "message": "🚀 Welcome to Ultra-Powerful Multi-Modal AI Platform - UNLIMITED Edition",
+        "tagline": "Real-time Intelligence • Multi-language • No Restrictions • Full Potential Unleashed",
         "models": {
-            "opus-4.5": "Lightning-fast conversational AI",
+            "opus-4.5": "Lightning-fast conversational AI with real-time data",
             "gpt5-pro": "Advanced reasoning for complex tasks",
             "stable-diffusion-3.5-large": "Professional image synthesis",
             "runway-gen-3-style": "Cinematic video generation",
             "gemini-1.5-flash": "Intelligent file & image analysis"
         },
-        "version": "5.1.0",
-        "api_tier": "Premium",
+        "version": "6.0.0 - UNLIMITED",
+        "api_tier": "Premium Unlimited",
+        "new_features": {
+            "multi_language": f"Supports {len(SUPPORTED_LANGUAGES)} languages including Hindi, English, Hinglish",
+            "real_time_data": "Live news, weather, crypto prices, web search",
+            "unlimited_files": "No file size restrictions",
+            "unlimited_conversations": "Unlimited message history",
+            "unlimited_context": "Enhanced context window"
+        },
+        "supported_languages": SUPPORTED_LANGUAGES,
+        "real_time_capabilities": [
+            "Current date, time, and timezone",
+            "Latest news from around the world",
+            "Real-time weather updates",
+            "Cryptocurrency prices (BTC, ETH, DOGE)",
+            "Web search and information lookup"
+        ],
         "endpoints": {
             "/": "GET - Platform status & capabilities",
-            "/chat": "POST - Intelligent multi-modal routing with memory",
-            "/chat/history": "GET - View conversation history",
+            "/chat": "POST - Intelligent multi-modal routing with memory & real-time data",
+            "/chat/history": "GET - View conversation history (unlimited)",
             "/chat/context": "GET - Get current conversation context",
+            "/realtime/news": "GET - Get latest news",
+            "/realtime/weather": "GET - Get weather data",
+            "/realtime/crypto": "GET - Get cryptocurrency prices",
+            "/realtime/search": "GET - Search the web",
             "/generate-image": "POST - Professional image creation",
             "/generate-video": "POST - Cinematic video synthesis",
-            "/analyze-file": "POST - Comprehensive file intelligence",
+            "/analyze-file": "POST - Comprehensive file intelligence (unlimited size)",
             "/analyze-image": "POST - Advanced visual analysis",
             "/extract-text": "POST - Premium document extraction",
             "/reset": "POST - Conversation management",
             "/health": "GET - System health monitoring"
         },
         "supported_formats": {
-            "images": ["PNG", "JPG", "JPEG", "GIF", "BMP", "WEBP"],
-            "documents": ["PDF", "DOCX", "TXT"],
-            "spreadsheets": ["XLSX", "XLS", "CSV"]
+            "images": ["PNG", "JPG", "JPEG", "GIF", "BMP", "WEBP", "SVG", "TIFF", "ICO"],
+            "documents": ["PDF", "DOCX", "TXT", "RTF", "ODT", "MD"],
+            "spreadsheets": ["XLSX", "XLS", "CSV", "ODS"],
+            "code": ["PY", "JS", "JAVA", "CPP", "C", "HTML", "CSS", "JSON", "XML"]
         },
-        "premium_features": [
-            "AI-powered intelligent routing",
-            "Conversation memory & context tracking",
-            "Multi-modal content generation",
-            "Enterprise-grade file analysis",
-            "Context-aware conversations",
-            "Professional-quality outputs",
-            "50MB file capacity",
-            "Multi-language support"
+        "unlimited_features": [
+            "✅ Unlimited file size support",
+            "✅ Unlimited conversation history",
+            "✅ Enhanced context window (20 messages)",
+            "✅ Multi-language support (13+ languages)",
+            "✅ Real-time data integration",
+            "✅ No rate limiting",
+            "✅ No usage restrictions",
+            "✅ Full potential unlocked"
         ],
-        "support": "For enterprise inquiries and technical support, please contact our team"
+        "support": "🌟 For enterprise inquiries and technical support, please contact our team"
     })
+
+@app.route('/realtime/news', methods=['GET'])
+def get_news():
+    """Get real-time news"""
+    query = request.args.get('query', 'latest')
+    country = request.args.get('country', 'in')
+    language = request.args.get('language', 'en')
+    
+    news = fetch_real_time_news(query, country, language)
+    
+    if news:
+        return jsonify({
+            "success": True,
+            "news": news,
+            "timestamp": get_current_time_info()['formatted']
+        })
+    else:
+        return jsonify({
+            "success": False,
+            "message": "Unable to fetch news. Please configure NewsAPI key."
+        }), 500
+
+@app.route('/realtime/weather', methods=['GET'])
+def get_weather():
+    """Get real-time weather"""
+    city = request.args.get('city', 'Lucknow')
+    
+    weather = fetch_weather_data(city)
+    
+    if weather:
+        return jsonify({
+            "success": True,
+            "weather": weather,
+            "timestamp": get_current_time_info()['formatted']
+        })
+    else:
+        return jsonify({
+            "success": False,
+            "message": "Unable to fetch weather. Please configure Weather API key."
+        }), 500
+
+@app.route('/realtime/crypto', methods=['GET'])
+def get_crypto():
+    """Get real-time cryptocurrency prices"""
+    crypto = fetch_crypto_prices()
+    
+    if crypto:
+        return jsonify({
+            "success": True,
+            "crypto": crypto,
+            "timestamp": get_current_time_info()['formatted']
+        })
+    else:
+        return jsonify({
+            "success": False,
+            "message": "Unable to fetch cryptocurrency prices."
+        }), 500
+
+@app.route('/realtime/search', methods=['GET'])
+def web_search():
+    """Search the web"""
+    query = request.args.get('query', '')
+    
+    if not query:
+        return jsonify({
+            "success": False,
+            "message": "Please provide a search query."
+        }), 400
+    
+    results = search_web(query)
+    
+    if results:
+        return jsonify({
+            "success": True,
+            "results": results,
+            "timestamp": get_current_time_info()['formatted']
+        })
+    else:
+        return jsonify({
+            "success": False,
+            "message": "Unable to perform web search."
+        }), 500
 
 @app.route('/chat/history', methods=['GET'])
 def get_chat_history():
-    """Get conversation history for a user"""
+    """Get conversation history for a user (UNLIMITED)"""
     try:
         user_id = request.args.get('user_id', 'default')
-        limit = int(request.args.get('limit', 20))
+        limit = request.args.get('limit', None)
+        limit = int(limit) if limit else None
         
         if user_id not in conversations:
             return jsonify({
@@ -542,7 +890,7 @@ def get_chat_history():
             })
         
         conv = conversations[user_id]
-        messages = conv["messages"][-limit:]
+        messages = conv["messages"][-limit:] if limit else conv["messages"]
         
         return jsonify({
             "success": True,
@@ -551,7 +899,9 @@ def get_chat_history():
             "total_messages": len(conv["messages"]),
             "context_summary": get_conversation_summary(user_id),
             "topics": conv["context"]["topics"],
-            "metadata": conv["metadata"]
+            "language": SUPPORTED_LANGUAGES.get(conv["context"]["language"], "English"),
+            "metadata": conv["metadata"],
+            "unlimited": True
         })
     except Exception as e:
         return jsonify({
@@ -582,6 +932,7 @@ def get_chat_context():
             "context": conv["context"],
             "recent_messages": len(get_conversation_context(user_id)) // 2,
             "summary": get_conversation_summary(user_id),
+            "language": SUPPORTED_LANGUAGES.get(conv["context"]["language"], "English"),
             "metadata": conv["metadata"]
         })
     except Exception as e:
@@ -591,17 +942,168 @@ def get_chat_context():
             "message": f"Unable to retrieve conversation context: {str(e)}"
         }), 500
 
+@app.route('/chat', methods=['POST'])
+def chat():
+    """Premium intelligent chat - Multi-modal AI routing with conversation memory & real-time data"""
+    try:
+        data = request.json
+        
+        if not data:
+            return jsonify({
+                "success": False,
+                "error": "invalid_request",
+                "message": "Please provide a valid JSON request body with your message."
+            }), 400
+        
+        user_message = data.get('message', '').strip()
+        user_id = data.get('user_id', 'default')
+        force_model = data.get('model', None)
+        
+        if not user_message:
+            return jsonify({
+                "success": False,
+                "error": "missing_message",
+                "message": "Please provide a message for our AI to process."
+            }), 400
+        
+        # Detect language
+        detected_language = detect_language(user_message)
+        
+        # Initialize conversation if needed
+        init_conversation(user_id)
+        
+        # Check for real-time data requirements
+        real_time_query = check_for_real_time_query(user_message)
+        real_time_data = None
+        
+        if real_time_query:
+            real_time_data = get_real_time_data(real_time_query, user_message)
+        
+        request_type = detect_request_type(user_message)
+        
+        if request_type == 'video':
+            prompt = clean_prompt(user_message, 'video')
+            duration = data.get('duration', 3)
+            result = generate_video_runway(prompt, duration)
+            
+            if result['success']:
+                update_conversation_context(user_id, user_message, f"Generated video: {prompt}", detected_language)
+                
+                return jsonify({
+                    "success": True,
+                    "type": "video",
+                    "message": "Your premium cinematic video has been generated successfully!",
+                    "video": result['video'],
+                    "format": "base64",
+                    "model_used": "runway-gen-3-style",
+                    "prompt": prompt,
+                    "duration": result.get('duration'),
+                    "fps": result.get('fps'),
+                    "quality": "professional",
+                    "language": SUPPORTED_LANGUAGES.get(detected_language),
+                    "conversation_context": get_conversation_summary(user_id)
+                })
+            else:
+                return jsonify({
+                    "success": False,
+                    "error": result.get('error'),
+                    "message": result.get('message'),
+                    "retry_after": result.get('retry_after')
+                }), 500
+        
+        elif request_type == 'image':
+            prompt = clean_prompt(user_message, 'image')
+            result = generate_image_sd35(prompt)
+            
+            if result['success']:
+                update_conversation_context(user_id, user_message, f"Generated image: {prompt}", detected_language)
+                
+                return jsonify({
+                    "success": True,
+                    "type": "image",
+                    "message": "Your professional-grade image has been created successfully!",
+                    "image": result['image'],
+                    "format": "base64",
+                    "model_used": "stable-diffusion-3.5-large",
+                    "prompt": prompt,
+                    "quality": "premium",
+                    "language": SUPPORTED_LANGUAGES.get(detected_language),
+                    "conversation_context": get_conversation_summary(user_id)
+                })
+            else:
+                return jsonify({
+                    "success": False,
+                    "error": result.get('error'),
+                    "message": result.get('message')
+                }), 500
+        
+        else:
+            # Get conversation context for continuity
+            conversation_history = get_conversation_context(user_id)
+            
+            if force_model:
+                selected_model = force_model
+            else:
+                selected_model = detect_query_type(user_message)
+            
+            if selected_model == 'gpt5-pro':
+                response_text = get_gpt5_pro_response(user_message, conversation_history, detected_language, real_time_data)
+            else:
+                response_text = get_opus_response(user_message, conversation_history, detected_language, real_time_data)
+            
+            if "unable" in response_text.lower() or "unavailable" in response_text.lower():
+                return jsonify({
+                    "success": False,
+                    "error": "service_error",
+                    "message": response_text
+                }), 500
+            
+            # Update conversation context
+            update_conversation_context(user_id, user_message, response_text, detected_language)
+            
+            input_tokens = len(user_message.split())
+            output_tokens = len(response_text.split())
+            
+            return jsonify({
+                "success": True,
+                "type": "text",
+                "message": "Response generated by our premium AI engine with conversation context & real-time data",
+                "response": response_text,
+                "model_used": selected_model,
+                "user_id": user_id,
+                "detected_language": SUPPORTED_LANGUAGES.get(detected_language),
+                "real_time_data_used": real_time_data is not None,
+                "real_time_query_type": real_time_query,
+                "usage": {
+                    "input_tokens": input_tokens,
+                    "output_tokens": output_tokens,
+                    "total_tokens": input_tokens + output_tokens
+                },
+                "conversation_length": conversations[user_id]["metadata"]["message_count"],
+                "context_used": len(conversation_history) // 2,
+                "topics_discussed": conversations[user_id]["context"]["topics"],
+                "quality": "professional",
+                "unlimited": True
+            })
+        
+    except Exception as e:
+        return jsonify({
+            "success": False,
+            "error": "server_error",
+            "message": f"We're experiencing an unexpected issue. Our engineers have been notified: {str(e)}"
+        }), 500
+
 @app.route('/analyze-file', methods=['POST'])
 def analyze_file():
     """
-    Premium file analysis endpoint - Comprehensive intelligence for your documents
+    Premium file analysis endpoint - UNLIMITED file size support
     """
     try:
         if 'file' not in request.files:
             return jsonify({
                 "success": False,
                 "error": "missing_file",
-                "message": "Please provide a file for analysis. We support images, documents, and spreadsheets up to 50MB."
+                "message": "Please provide a file for analysis. We support all file formats with unlimited size."
             }), 400
         
         file = request.files['file']
@@ -618,7 +1120,7 @@ def analyze_file():
             return jsonify({
                 "success": False,
                 "error": "unsupported_format",
-                "message": "This file format is not currently supported. We accept: PNG, JPG, PDF, DOCX, XLSX, CSV, and TXT files."
+                "message": f"This file format is not currently supported. We accept: {', '.join(ALLOWED_EXTENSIONS['all'])}"
             }), 400
         
         filename = secure_filename(file.filename)
@@ -627,14 +1129,16 @@ def analyze_file():
         
         file_type = get_file_type(filename)
         file_ext = filename.rsplit('.', 1)[1].lower()
+        file_size = os.path.getsize(file_path)
         
         result = {
             "success": True,
-            "message": "File analyzed successfully with premium intelligence",
+            "message": "File analyzed successfully with premium intelligence (UNLIMITED)",
             "filename": filename,
             "file_type": file_type,
-            "file_size": os.path.getsize(file_path),
-            "processing_quality": "premium"
+            "file_size": f"{file_size / (1024*1024):.2f} MB",
+            "processing_quality": "premium",
+            "unlimited": True
         }
         
         if file_type == 'image':
@@ -667,6 +1171,14 @@ def analyze_file():
             result["model_used"] = "Advanced analytics engine"
             result["analysis_type"] = "Statistical data intelligence"
         
+        elif file_type == 'code':
+            code_text = extract_text_from_txt(file_path)
+            result["code"] = code_text
+            result["lines"] = len(code_text.split('\n'))
+            result["analysis"] = analyze_document_with_ai(code_text, f"Analyze this {file_ext} code: {question}")
+            result["model_used"] = "gpt5-pro"
+            result["analysis_type"] = "Code analysis & review"
+        
         os.remove(file_path)
         
         return jsonify(result)
@@ -676,369 +1188,6 @@ def analyze_file():
             "success": False, 
             "error": "processing_error",
             "message": f"We encountered an issue while processing your file. Our team has been notified: {str(e)}"
-        }), 500
-
-@app.route('/analyze-image', methods=['POST'])
-def analyze_image():
-    """Premium image analysis with advanced AI vision"""
-    try:
-        if 'image' not in request.files:
-            return jsonify({
-                "success": False,
-                "error": "missing_image",
-                "message": "Please upload an image for our advanced visual analysis system."
-            }), 400
-        
-        image = request.files['image']
-        question = request.form.get('question', 'Provide detailed visual analysis with professional insights')
-        
-        if image.filename == '':
-            return jsonify({
-                "success": False,
-                "error": "invalid_image",
-                "message": "The uploaded image appears to be invalid. Please select a valid image file."
-            }), 400
-        
-        filename = secure_filename(image.filename)
-        if not filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS['image']:
-            return jsonify({
-                "success": False,
-                "error": "unsupported_format",
-                "message": "This image format is not supported. Please upload PNG, JPG, JPEG, GIF, BMP, or WEBP files."
-            }), 400
-        
-        image_path = os.path.join(UPLOAD_FOLDER, filename)
-        image.save(image_path)
-        
-        analysis = analyze_image_with_gemini(image_path, question)
-        img = Image.open(image_path)
-        
-        result = {
-            "success": True,
-            "message": "Image analyzed with premium visual intelligence",
-            "analysis": analysis,
-            "image_info": {
-                "filename": filename,
-                "format": img.format,
-                "dimensions": img.size,
-                "color_mode": img.mode,
-                "quality_tier": "professional"
-            },
-            "model_used": "gemini-1.5-flash",
-            "analysis_type": "Advanced computer vision"
-        }
-        
-        os.remove(image_path)
-        return jsonify(result)
-        
-    except Exception as e:
-        return jsonify({
-            "success": False,
-            "error": "analysis_failed",
-            "message": f"We're unable to complete visual analysis at this time: {str(e)}. Please try again."
-        }), 500
-
-@app.route('/extract-text', methods=['POST'])
-def extract_text():
-    """Premium document text extraction service"""
-    try:
-        if 'file' not in request.files:
-            return jsonify({
-                "success": False,
-                "error": "missing_file",
-                "message": "Please provide a document for text extraction. We support PDF, DOCX, and TXT formats."
-            }), 400
-        
-        file = request.files['file']
-        
-        if file.filename == '':
-            return jsonify({
-                "success": False,
-                "error": "invalid_file",
-                "message": "The uploaded file is invalid. Please select a valid document."
-            }), 400
-        
-        filename = secure_filename(file.filename)
-        file_ext = filename.rsplit('.', 1)[1].lower()
-        
-        if file_ext not in ['pdf', 'docx', 'txt']:
-            return jsonify({
-                "success": False,
-                "error": "unsupported_format",
-                "message": "This document format is not supported. Please upload PDF, DOCX, or TXT files."
-            }), 400
-        
-        file_path = os.path.join(UPLOAD_FOLDER, filename)
-        file.save(file_path)
-        
-        if file_ext == 'pdf':
-            text = extract_text_from_pdf(file_path)
-            extraction_type = "PDF document extraction"
-        elif file_ext == 'docx':
-            text = extract_text_from_docx(file_path)
-            extraction_type = "Word document extraction"
-        else:
-            text = extract_text_from_txt(file_path)
-            extraction_type = "Text file extraction"
-        
-        result = {
-            "success": True,
-            "message": "Text extracted successfully with premium accuracy",
-            "filename": filename,
-            "text": text,
-            "text_length": len(text),
-            "word_count": len(text.split()),
-            "extraction_type": extraction_type,
-            "quality": "premium"
-        }
-        
-        os.remove(file_path)
-        return jsonify(result)
-        
-    except Exception as e:
-        return jsonify({
-            "success": False,
-            "error": "extraction_failed",
-            "message": f"We're unable to extract text from this document: {str(e)}. Please verify the file and try again."
-        }), 500
-
-@app.route('/chat', methods=['POST'])
-def chat():
-    """Premium intelligent chat - Multi-modal AI routing with conversation memory"""
-    try:
-        data = request.json
-        
-        if not data:
-            return jsonify({
-                "success": False,
-                "error": "invalid_request",
-                "message": "Please provide a valid JSON request body with your message."
-            }), 400
-        
-        user_message = data.get('message', '').strip()
-        user_id = data.get('user_id', 'default')
-        force_model = data.get('model', None)
-        
-        if not user_message:
-            return jsonify({
-                "success": False,
-                "error": "missing_message",
-                "message": "Please provide a message for our AI to process."
-            }), 400
-        
-        # Initialize conversation if needed
-        init_conversation(user_id)
-        
-        request_type = detect_request_type(user_message)
-        
-        if request_type == 'video':
-            prompt = clean_prompt(user_message, 'video')
-            duration = data.get('duration', 3)
-            result = generate_video_runway(prompt, duration)
-            
-            if result['success']:
-                # Update context
-                update_conversation_context(user_id, user_message, f"Generated video: {prompt}")
-                
-                return jsonify({
-                    "success": True,
-                    "type": "video",
-                    "message": "Your premium cinematic video has been generated successfully!",
-                    "video": result['video'],
-                    "format": "base64",
-                    "model_used": "runway-gen-3-style",
-                    "prompt": prompt,
-                    "duration": result.get('duration'),
-                    "fps": result.get('fps'),
-                    "quality": "professional",
-                    "conversation_context": get_conversation_summary(user_id)
-                })
-            else:
-                return jsonify({
-                    "success": False,
-                    "error": result.get('error'),
-                    "message": result.get('message'),
-                    "retry_after": result.get('retry_after')
-                }), 500
-        
-        elif request_type == 'image':
-            prompt = clean_prompt(user_message, 'image')
-            result = generate_image_sd35(prompt)
-            
-            if result['success']:
-                # Update context
-                update_conversation_context(user_id, user_message, f"Generated image: {prompt}")
-                
-                return jsonify({
-                    "success": True,
-                    "type": "image",
-                    "message": "Your professional-grade image has been created successfully!",
-                    "image": result['image'],
-                    "format": "base64",
-                    "model_used": "stable-diffusion-3.5-large",
-                    "prompt": prompt,
-                    "quality": "premium",
-                    "conversation_context": get_conversation_summary(user_id)
-                })
-            else:
-                return jsonify({
-                    "success": False,
-                    "error": result.get('error'),
-                    "message": result.get('message')
-                }), 500
-        
-        else:
-            # Get conversation context for continuity
-            conversation_history = get_conversation_context(user_id)
-            
-            if force_model:
-                selected_model = force_model
-            else:
-                selected_model = detect_query_type(user_message)
-            
-            if selected_model == 'gpt5-pro':
-                response_text = get_gpt5_pro_response(user_message, conversation_history)
-            else:
-                response_text = get_opus_response(user_message, conversation_history)
-            
-            if "unable" in response_text.lower() or "unavailable" in response_text.lower():
-                return jsonify({
-                    "success": False,
-                    "error": "service_error",
-                    "message": response_text
-                }), 500
-            
-            # Update conversation context
-            update_conversation_context(user_id, user_message, response_text)
-            
-            input_tokens = len(user_message.split())
-            output_tokens = len(response_text.split())
-            
-            return jsonify({
-                "success": True,
-                "type": "text",
-                "message": "Response generated by our premium AI engine with conversation context",
-                "response": response_text,
-                "model_used": selected_model,
-                "user_id": user_id,
-                "usage": {
-                    "input_tokens": input_tokens,
-                    "output_tokens": output_tokens,
-                    "total_tokens": input_tokens + output_tokens
-                },
-                "conversation_length": conversations[user_id]["metadata"]["message_count"],
-                "context_used": len(conversation_history) // 2,
-                "topics_discussed": conversations[user_id]["context"]["topics"],
-                "quality": "professional"
-            })
-        
-    except Exception as e:
-        return jsonify({
-            "success": False,
-            "error": "server_error",
-            "message": f"We're experiencing an unexpected issue. Our engineers have been notified: {str(e)}"
-        }), 500
-
-@app.route('/generate-image', methods=['POST'])
-def generate_image():
-    """Premium image generation endpoint"""
-    try:
-        data = request.json
-        if not data:
-            return jsonify({
-                "success": False,
-                "error": "invalid_request",
-                "message": "Please provide a valid JSON request with your image prompt."
-            }), 400
-        
-        prompt = data.get('prompt', '').strip()
-        if not prompt:
-            return jsonify({
-                "success": False,
-                "error": "missing_prompt",
-                "message": "Please provide a descriptive prompt for image generation."
-            }), 400
-        
-        result = generate_image_sd35(prompt)
-        
-        if result['success']:
-            return jsonify({
-                "success": True,
-                "message": "Your premium image has been crafted successfully!",
-                "image": result['image'],
-                "format": "base64",
-                "model": "stable-diffusion-3.5-large",
-                "prompt": prompt,
-                "quality": "professional-grade"
-            })
-        else:
-            return jsonify({
-                "success": False,
-                "error": result.get('error'),
-                "message": result.get('message')
-            }), 500
-    except Exception as e:
-        return jsonify({
-            "success": False,
-            "error": "generation_failed",
-            "message": f"Image generation encountered an issue: {str(e)}. Please try again."
-        }), 500
-
-@app.route('/generate-video', methods=['POST'])
-def generate_video():
-    """Premium cinematic video generation"""
-    try:
-        data = request.json
-        if not data:
-            return jsonify({
-                "success": False,
-                "error": "invalid_request",
-                "message": "Please provide a valid JSON request with your video prompt."
-            }), 400
-        
-        prompt = data.get('prompt', '').strip()
-        duration = data.get('duration', 3)
-        
-        if not prompt:
-            return jsonify({
-                "success": False,
-                "error": "missing_prompt",
-                "message": "Please provide a descriptive prompt for video generation."
-            }), 400
-        
-        if duration < 1 or duration > 10:
-            return jsonify({
-                "success": False,
-                "error": "invalid_duration",
-                "message": "Video duration must be between 1-10 seconds for optimal quality."
-            }), 400
-        
-        result = generate_video_runway(prompt, duration)
-        
-        if result['success']:
-            return jsonify({
-                "success": True,
-                "message": "Your cinematic video has been produced successfully!",
-                "video": result['video'],
-                "format": "base64",
-                "model": "runway-gen-3-style",
-                "prompt": prompt,
-                "duration": result['duration'],
-                "fps": result['fps'],
-                "quality": "professional-cinematic"
-            })
-        else:
-            return jsonify({
-                "success": False,
-                "error": result.get('error'),
-                "message": result.get('message'),
-                "retry_after": result.get('retry_after')
-            }), 500
-    except Exception as e:
-        return jsonify({
-            "success": False,
-            "error": "generation_failed",
-            "message": f"Video generation encountered an issue: {str(e)}. Please try again."
         }), 500
 
 @app.route('/reset', methods=['POST'])
@@ -1051,6 +1200,7 @@ def reset_conversation():
         if user_id in conversations:
             msg_count = conversations[user_id]["metadata"]["message_count"]
             topics = conversations[user_id]["context"]["topics"]
+            language = conversations[user_id]["context"]["language"]
             conversations[user_id] = None
             del conversations[user_id]
             
@@ -1059,7 +1209,8 @@ def reset_conversation():
                 "message": f"Your conversation has been reset successfully. Cleared {msg_count} messages and {len(topics)} topics.",
                 "user_id": user_id,
                 "status": "refreshed",
-                "cleared_topics": topics
+                "cleared_topics": topics,
+                "language": SUPPORTED_LANGUAGES.get(language)
             })
         else:
             return jsonify({
@@ -1080,36 +1231,45 @@ def health_check():
     """Premium system health monitoring"""
     return jsonify({
         "status": "optimal",
-        "message": "All systems operational - Premium AI services running smoothly",
+        "message": "🚀 All systems operational - UNLIMITED Premium AI services running at full potential",
         "uptime": "99.9%",
         "active_users": len(conversations),
         "total_conversations": sum(conv["metadata"]["message_count"] for conv in conversations.values() if conv),
         "models": {
-            "opus-4.5": "Operational",
-            "gpt5-pro": "Operational",
-            "stable-diffusion-3.5": "Operational",
-            "runway-gen-3-style": "Operational",
-            "gemini-1.5-flash": "Operational" if gemini_model else "Configuration Required"
+            "opus-4.5": "Operational ✅",
+            "gpt5-pro": "Operational ✅",
+            "stable-diffusion-3.5": "Operational ✅",
+            "runway-gen-3-style": "Operational ✅",
+            "gemini-1.5-flash": "Operational ✅" if gemini_model else "Configuration Required"
         },
         "capabilities": {
             "text_chat": True,
             "conversation_memory": True,
             "context_tracking": True,
+            "multi_language": True,
+            "real_time_data": True,
             "image_generation": True,
             "video_generation": True,
             "file_analysis": True,
             "image_analysis": gemini_model is not None,
             "document_extraction": True,
-            "spreadsheet_analysis": True
+            "spreadsheet_analysis": True,
+            "code_analysis": True,
+            "web_search": True,
+            "news_updates": True,
+            "weather_data": True,
+            "crypto_prices": True
         },
-        "memory_features": {
-            "max_conversation_length": MAX_CONVERSATION_LENGTH,
-            "context_window": CONTEXT_WINDOW,
-            "topic_tracking": True,
-            "entity_recognition": True
+        "unlimited_features": {
+            "file_size": "Unlimited ♾️",
+            "conversation_length": "Unlimited ♾️",
+            "context_window": f"{CONTEXT_WINDOW} messages (Enhanced)",
+            "supported_languages": len(SUPPORTED_LANGUAGES),
+            "file_formats": len(ALLOWED_EXTENSIONS['all'])
         },
-        "service_tier": "Premium",
-        "support": "24/7 enterprise support available"
+        "real_time_info": get_current_time_info(),
+        "service_tier": "Premium UNLIMITED",
+        "support": "🌟 24/7 enterprise support available"
     })
 
 if __name__ == '__main__':
