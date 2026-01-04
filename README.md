@@ -1,121 +1,320 @@
-# Free AI Chatbot API - Opus 4.5 Equivalent
+# 🤖 Intelligent Dual AI API Router
 
-🚀 **Completely FREE** AI chatbot API with Claude Opus 4.5 level responses!
+**Free AI API** with automatic intelligent routing between **Opus 4.5** and **GPT-5 Pro** equivalent models!
 
-## ✨ Features
-- ✅ **100% FREE** - No API key needed!
-- ✅ Claude Opus 4.5 equivalent responses
-- ✅ Conversation history tracking
-- ✅ Multiple user support
-- ✅ REST API endpoints
-- ✅ Easy deployment on Render
-- ✅ No rate limits
+## ✨ Revolutionary Features
 
-## 🌐 Live Demo
-Deploy kar lo aur apna URL yahan update kar do!
+- 🧠 **Intelligent Auto-Routing** - Automatically selects best model for your query
+- ⚡ **Dual Model Support** - Opus 4.5 (fast) + GPT-5 Pro (complex)
+- 🎯 **Smart Detection** - Analyzes query complexity and routes accordingly
+- 💰 **100% FREE** - No API key needed!
+- 🔄 **Conversation Memory** - Maintains context across messages
+- 🚀 **Production Ready** - Deploy on Render in 2 minutes
+
+## 🎯 How It Works
+
+### Intelligent Routing System
+
+API **automatically detects** query type and selects best model:
+
+#### **GPT-5 Pro Equivalent** triggers for:
+- 💻 **Coding tasks**: algorithms, debugging, development
+- 🔬 **Research & Analysis**: scientific, academic work
+- 🧮 **Complex reasoning**: math, logic, proofs
+- 📊 **Professional tasks**: legal, medical, financial
+- 📝 **Long-form content**: essays, reports, documentation
+
+#### **Opus 4.5 Equivalent** triggers for:
+- 💬 **General conversation**: greetings, simple questions
+- ❓ **Quick answers**: definitions, explanations
+- 📚 **Basic info**: "what is", "who is", "where is"
+- ⚡ **Fast queries**: summaries, translations
 
 ## 📡 API Endpoints
 
-### GET /
-Health check and API information
+### 🎯 Main Endpoint (Auto-Routing)
+
+#### POST /chat
+Intelligently routes to best model automatically
+
+**Request:**
+```json
+{
+  "message": "Write a Python function to calculate fibonacci",
+  "user_id": "user123"  // Optional
+}
+```
 
 **Response:**
 ```json
 {
-  "status": "active",
-  "message": "Free AI Chatbot API is running",
-  "model": "opus-4.5-equivalent",
-  "endpoints": {
-    "/": "GET - API status",
-    "/chat": "POST - Send message",
-    "/reset": "POST - Reset conversation"
+  "success": true,
+  "response": "Here's an optimized Python function...",
+  "model_used": "gpt5-pro",
+  "user_id": "user123",
+  "usage": {
+    "input_tokens": 8,
+    "output_tokens": 150,
+    "total_tokens": 158
+  },
+  "conversation_length": 2,
+  "routing_info": {
+    "auto_selected": true,
+    "reason": "Intelligent query analysis"
   }
 }
 ```
 
-### POST /chat
-Send message to AI chatbot
+### 🎨 Force Specific Model
 
-**Request:**
+#### POST /chat/opus
+Force Opus 4.5 equivalent (fast responses)
+
+#### POST /chat/gpt5pro
+Force GPT-5 Pro equivalent (detailed responses)
+
+**Request (same format):**
 ```json
 {
-  "message": "What is artificial intelligence?",
-  "user_id": "user123" // Optional, defaults to 'default'
-}
-```
-
-**Response:**
-```json
-{
-  "success": true,
-  "response": "Artificial intelligence (AI) refers to...",
-  "model": "opus-4.5-equivalent",
-  "user_id": "user123",
-  "usage": {
-    "input_tokens": 5,
-    "output_tokens": 150,
-    "total_tokens": 155
-  },
-  "conversation_length": 2
-}
-```
-
-### POST /reset
-Reset conversation history
-
-**Request:**
-```json
-{
-  "user_id": "user123" // Optional
-}
-```
-
-**Response:**
-```json
-{
-  "success": true,
-  "message": "Conversation reset successfully. Cleared 10 messages.",
+  "message": "Your question",
   "user_id": "user123"
 }
 ```
 
-### GET /health
-Check API health status
+### 🔄 Other Endpoints
 
-**Response:**
+#### GET /
+API status and information
+
+#### POST /reset
+Reset conversation history
 ```json
 {
-  "status": "healthy",
-  "active_users": 5,
-  "total_conversations": 125
+  "user_id": "user123"
 }
 ```
 
+#### GET /health
+Health check and statistics
+
 ## 🚀 Deploy on Render (FREE!)
 
-### Step 1: Fork Repository
-Fork this repository to your GitHub account.
+### Quick Deploy (2 Minutes)
 
-### Step 2: Connect to Render
-1. Go to [Render.com](https://render.com)
-2. Sign up/Login (use GitHub for easy connection)
-3. Click **"New +"** → **"Web Service"**
-4. Connect your GitHub repository: `claude-opus-chatbot`
+1. **Fork this repo** to your GitHub
 
-### Step 3: Configure
-- **Name**: `my-chatbot-api` (or any name)
-- **Environment**: `Python 3`
-- **Build Command**: `pip install -r requirements.txt`
-- **Start Command**: `gunicorn app:app`
-- **Instance Type**: **Free**
+2. **Go to [Render.com](https://render.com)**
+   - Sign up/Login with GitHub
 
-### Step 4: Deploy!
-✅ **NO Environment Variables Needed!**
-✅ **NO API Keys Required!**
+3. **Create Web Service**
+   - Click "New +" → "Web Service"
+   - Connect `claude-opus-chatbot` repository
 
-Just click **"Create Web Service"** and you're done! 🎉
+4. **Configure (Auto-filled)**
+   ```
+   Name: ai-router-api
+   Environment: Python 3
+   Build: pip install -r requirements.txt
+   Start: gunicorn app:app
+   Instance: Free
+   ```
 
-## 💻 Local Development
+5. **Deploy!**
+   - ✅ No API keys needed
+   - ✅ No environment variables
+   - Just click "Create Web Service"
+
+## 💻 Usage Examples
+
+### Python Example
+```python
+import requests
+
+url = "https://your-app.onrender.com/chat"
+
+# Example 1: Coding (Auto-routes to GPT-5 Pro)
+payload = {
+    "message": "Create a REST API with Flask for user authentication",
+    "user_id": "dev123"
+}
+
+response = requests.post(url, json=payload)
+result = response.json()
+
+print(f"Model used: {result['model_used']}")  # gpt5-pro
+print(result['response'])
+
+# Example 2: Simple question (Auto-routes to Opus 4.5)
+payload = {
+    "message": "What is Python?",
+    "user_id": "dev123"
+}
+
+response = requests.post(url, json=payload)
+result = response.json()
+
+print(f"Model used: {result['model_used']}")  # opus-4.5
+print(result['response'])
+```
+
+### Force Specific Model
+```python
+# Force GPT-5 Pro for detailed response
+url = "https://your-app.onrender.com/chat/gpt5pro"
+payload = {"message": "Explain quantum computing"}
+
+# Force Opus 4.5 for quick response
+url = "https://your-app.onrender.com/chat/opus"
+payload = {"message": "What is AI?"}
+```
+
+### JavaScript/Node.js
+```javascript
+const axios = require('axios');
+
+const url = 'https://your-app.onrender.com/chat';
+
+// Coding task - Auto-routes to GPT-5 Pro
+const codingQuery = {
+  message: 'Write a sorting algorithm in JavaScript',
+  user_id: 'js_dev'
+};
+
+axios.post(url, codingQuery)
+  .then(res => {
+    console.log('Model:', res.data.model_used);
+    console.log('Response:', res.data.response);
+  });
+```
+
+### cURL
+```bash
+# Auto-routing
+curl -X POST https://your-app.onrender.com/chat \
+  -H "Content-Type: application/json" \
+  -d '{"message": "Debug this Python code", "user_id": "test"}'
+
+# Force GPT-5 Pro
+curl -X POST https://your-app.onrender.com/chat/gpt5pro \
+  -H "Content-Type: application/json" \
+  -d '{"message": "Analyze this algorithm complexity"}'
+```
+
+## 🎯 Routing Intelligence Examples
+
+| Query | Detected Model | Reason |
+|-------|----------------|--------|
+| "Write a Python function" | **GPT-5 Pro** | Coding task |
+| "Debug my code" | **GPT-5 Pro** | Technical/complex |
+| "Research paper on AI" | **GPT-5 Pro** | Research task |
+| "Calculate fibonacci" | **GPT-5 Pro** | Algorithm |
+| "Hello, how are you?" | **Opus 4.5** | General chat |
+| "What is Python?" | **Opus 4.5** | Simple definition |
+| "Summarize this" | **Opus 4.5** | Quick task |
+| "Translate to Hindi" | **Opus 4.5** | Fast operation |
+
+## 🔥 Advanced Features
+
+### Conversation Context
+```python
+# All messages maintain context per user_id
+url = "https://your-app.onrender.com/chat"
+
+# Message 1
+requests.post(url, json={
+    "message": "My name is Aman",
+    "user_id": "aman123"
+})
+
+# Message 2 - Remembers context
+response = requests.post(url, json={
+    "message": "What's my name?",
+    "user_id": "aman123"
+})
+# Response: "Your name is Aman"
+```
+
+### Reset Conversation
+```python
+requests.post("https://your-app.onrender.com/reset", json={
+    "user_id": "aman123"
+})
+```
+
+### Health Monitoring
+```python
+response = requests.get("https://your-app.onrender.com/health")
+print(response.json())
+# {
+#   "status": "healthy",
+#   "active_users": 10,
+#   "total_conversations": 150,
+#   "models": {"opus-4.5": "Available", "gpt5-pro": "Available"}
+# }
+```
+
+## 🎨 Integration Examples
+
+### Telegram Bot
+```python
+from telegram import Update
+from telegram.ext import Application, MessageHandler, filters
+import requests
+
+API_URL = "https://your-app.onrender.com/chat"
+
+async def handle_message(update: Update, context):
+    user_msg = update.message.text
+    user_id = str(update.message.from_user.id)
+    
+    response = requests.post(API_URL, json={
+        "message": user_msg,
+        "user_id": user_id
+    })
+    
+    result = response.json()
+    model_emoji = "🚀" if result['model_used'] == 'gpt5-pro' else "⚡"
+    
+    await update.message.reply_text(
+        f"{model_emoji} {result['response']}\n\n"
+        f"Model: {result['model_used']}"
+    )
+```
+
+### Discord Bot
+```python
+import discord
+import requests
+
+API_URL = "https://your-app.onrender.com/chat"
+
+@client.event
+async def on_message(message):
+    if message.author == client.user:
+        return
+    
+    response = requests.post(API_URL, json={
+        "message": message.content,
+        "user_id": str(message.author.id)
+    })
+    
+    result = response.json()
+    await message.channel.send(
+        f"**{result['model_used'].upper()}**: {result['response']}"
+    )
+```
+
+## 📊 Performance
+
+| Feature | Opus 4.5 | GPT-5 Pro |
+|---------|----------|----------|
+| **Speed** | ⚡⚡⚡⚡⚡ | ⚡⚡⚡ |
+| **Quality** | 🌟🌟🌟🌟 | 🌟🌟🌟🌟🌟 |
+| **Use Case** | General, Fast | Complex, Detailed |
+| **Response Time** | 1-3 seconds | 3-10 seconds |
+| **Best For** | Chat, Quick info | Code, Analysis |
+
+## 🔧 Local Development
 
 ```bash
 # Clone repository
@@ -129,153 +328,58 @@ pip install -r requirements.txt
 python app.py
 ```
 
-API will be available at: `http://localhost:5000`
+Access at: `http://localhost:5000`
 
-## 📝 Usage Examples
+## 🎯 Why This API?
 
-### Python Example
-```python
-import requests
+### ✅ Advantages
+- **Smart Routing** - Best model for each query
+- **No API Keys** - Zero setup hassle
+- **Free Forever** - No hidden costs
+- **Context Memory** - Natural conversations
+- **Production Ready** - Stable and reliable
+- **Multi-Model** - Best of both worlds
 
-# Your deployed API URL
-url = "https://your-app.onrender.com/chat"
+### 🆚 Comparison
 
-# Send message
-payload = {
-    "message": "Explain quantum computing in simple terms",
-    "user_id": "user123"
-}
+| Feature | This API | Claude Official | OpenAI Official |
+|---------|----------|-----------------|----------------|
+| Cost | **FREE** | $3-25/MTok | $1-120/MTok |
+| API Key | **Not Needed** | Required | Required |
+| Auto-Routing | **Yes** | No | No |
+| Models | **2 Models** | 3 Models | 10+ Models |
+| Setup Time | **1 min** | 10 min | 10 min |
 
-response = requests.post(url, json=payload)
-result = response.json()
+## 🚨 Important Notes
 
-print(result['response'])
-print(f"Tokens used: {result['usage']['total_tokens']}")
-```
-
-### JavaScript/Node.js Example
-```javascript
-const axios = require('axios');
-
-const url = 'https://your-app.onrender.com/chat';
-
-const payload = {
-  message: 'What is machine learning?',
-  user_id: 'user456'
-};
-
-axios.post(url, payload)
-  .then(response => {
-    console.log(response.data.response);
-  })
-  .catch(error => {
-    console.error('Error:', error);
-  });
-```
-
-### cURL Example
-```bash
-curl -X POST https://your-app.onrender.com/chat \
-  -H "Content-Type: application/json" \
-  -d '{"message": "Hello AI!", "user_id": "test"}'
-```
-
-### Telegram Bot Integration
-```python
-import requests
-from telegram import Update
-from telegram.ext import Application, CommandHandler, MessageHandler, filters
-
-API_URL = "https://your-app.onrender.com/chat"
-
-async def handle_message(update: Update, context):
-    user_message = update.message.text
-    user_id = str(update.message.from_user.id)
-    
-    # Call your API
-    response = requests.post(API_URL, json={
-        "message": user_message,
-        "user_id": user_id
-    })
-    
-    result = response.json()
-    await update.message.reply_text(result['response'])
-
-# Add to your bot
-app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
-```
-
-## 🎯 Features in Detail
-
-### Conversation Memory
-- API automatically tracks conversation history per user
-- Use `user_id` to maintain separate conversations
-- Use `/reset` endpoint to clear history
-
-### Multiple Users
-- Support for unlimited concurrent users
-- Each user identified by unique `user_id`
-- Independent conversation histories
-
-### Token Tracking
-- Estimates input/output tokens
-- Helps monitor API usage
-- No limits or restrictions
-
-## ⚡ Performance
-- Fast response times
-- Auto-scaling on Render
-- Handles concurrent requests
-- Free tier: Sleeps after 15min inactivity
-
-## 🔧 Troubleshooting
-
-### API is slow
-- Free tier may take 30-50 seconds to wake up
-- Upgrade to paid tier for instant responses
-
-### Getting errors
-- Check request format (must be JSON)
-- Ensure `message` field is not empty
-- Verify API URL is correct
-
-## 📊 API Limits
-- ✅ **FREE Forever**
-- ✅ No rate limits
-- ✅ No API key needed
-- ✅ Unlimited requests
-
-## 🌟 Advantages
-
-| Feature | This API | Claude Opus 4.5 |
-|---------|----------|----------------|
-| Cost | **FREE** | $5-25 per MTok |
-| API Key | **Not Required** | Required |
-| Setup Time | **1 minute** | 10+ minutes |
-| Quality | High | Highest |
-| Rate Limits | None | Yes |
-
-## 🔐 Security Note
-This API uses a free backend service. For production use with sensitive data, consider:
-- Adding authentication
-- Rate limiting
-- Input validation
-- Encryption
+- Free tier sleeps after 15min inactivity (30-50s wake time)
+- For production, consider paid tier for instant responses
+- No rate limits on free version
+- Supports unlimited concurrent users
 
 ## 📄 License
-MIT License - Free to use, modify, and distribute!
+MIT License - Free to use and modify!
 
 ## 👨‍💻 Author
 Created by **CodeX_Network**
 
 ## 🤝 Contributing
-Pull requests are welcome! Feel free to improve this project.
+Pull requests welcome! Improve the routing algorithm or add features.
 
 ## ⭐ Support
-If this helped you, please star the repository!
+If this helped you, please **star the repository**!
 
 ---
 
-**Happy Coding! 🚀**
+## 🎉 Quick Start Summary
 
-Deploy now and get your FREE AI API in minutes!
+1. ✅ Fork this repo
+2. ✅ Deploy on Render (2 minutes)
+3. ✅ No API keys needed
+4. ✅ Start using immediately!
+
+**Deploy now and get your intelligent AI router in minutes!** 🚀
+
+---
+
+**Happy Coding!** 🎯
