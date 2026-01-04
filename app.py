@@ -6,8 +6,19 @@ import re
 import base64
 from io import BytesIO
 import time
+from PIL import Image
+import PyPDF2
+from docx import Document
+import pandas as pd
+import google.generativeai as genai
+from werkzeug.utils import secure_filename
 
 app = Flask(__name__)
+
+# Configure upload settings
+app.config['MAX_CONTENT_LENGTH'] = 50 * 1024 * 1024  # 50MB max file size
+UPLOAD_FOLDER = '/tmp/uploads'
+os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 
 # Conversation storage
 conversations = {}
@@ -18,11 +29,114 @@ GPT5_PRO_API = 'https://chatbot-ji1z.onrender.com/chatbot-ji1z'
 IMAGE_GEN_API = 'https://api-inference.huggingface.co/models/stabilityai/stable-diffusion-3.5-large'
 VIDEO_GEN_API = 'https://api-inference.huggingface.co/models/ali-vilab/text-to-video-ms-1.7b'
 
+# Configure Gemini for file analysis
+GEMINI_API_KEY = os.environ.get('GEMINI_API_KEY', '')  # Set this in environment
+if GEMINI_API_KEY:
+    genai.configure(api_key=GEMINI_API_KEY)
+    gemini_model = genai.GenerativeModel('gemini-1.5-flash')
+else:
+    gemini_model = None
+
+# Allowed file extensions
+ALLOWED_EXTENSIONS = {
+    'image': {'png', 'jpg', 'jpeg', 'gif', 'bmp', 'webp'},
+    'document': {'pdf', 'doc', 'docx', 'txt'},
+    'spreadsheet': {'xlsx', 'xls', 'csv'},
+    'all': {'png', 'jpg', 'jpeg', 'gif', 'bmp', 'webp', 'pdf', 'doc', 'docx', 'txt', 'xlsx', 'xls', 'csv'}
+}
+
+def allowed_file(filename):
+    return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS['all']
+
+def get_file_type(filename):
+    ext = filename.rsplit('.', 1)[1].lower()
+    if ext in ALLOWED_EXTENSIONS['image']:
+        return 'image'
+    elif ext in ALLOWED_EXTENSIONS['document']:
+        return 'document'
+    elif ext in ALLOWED_EXTENSIONS['spreadsheet']:
+        return 'spreadsheet'
+    return 'unknown'
+
+def extract_text_from_pdf(file_path):
+    """Extract text from PDF file"""
+    try:
+        text = ""
+        with open(file_path, 'rb') as file:
+            pdf_reader = PyPDF2.PdfReader(file)
+            for page in pdf_reader.pages:
+                text += page.extract_text() + "\n"
+        return text.strip()
+    except Exception as e:
+        return f"Error extracting PDF: {str(e)}"
+
+def extract_text_from_docx(file_path):
+    """Extract text from Word document"""
+    try:
+        doc = Document(file_path)
+        text = "\n".join([para.text for para in doc.paragraphs])
+        return text.strip()
+    except Exception as e:
+        return f"Error extracting DOCX: {str(e)}"
+
+def extract_text_from_txt(file_path):
+    """Extract text from TXT file"""
+    try:
+        with open(file_path, 'r', encoding='utf-8') as file:
+            return file.read().strip()
+    except Exception as e:
+        return f"Error reading TXT: {str(e)}"
+
+def analyze_spreadsheet(file_path, file_ext):
+    """Analyze Excel or CSV file"""
+    try:
+        if file_ext == 'csv':
+            df = pd.read_csv(file_path)
+        else:
+            df = pd.read_excel(file_path)
+        
+        analysis = {
+            "rows": len(df),
+            "columns": len(df.columns),
+            "column_names": df.columns.tolist(),
+            "data_types": df.dtypes.astype(str).to_dict(),
+            "summary": df.describe().to_dict() if len(df) > 0 else {},
+            "preview": df.head(10).to_dict('records'),
+            "missing_values": df.isnull().sum().to_dict()
+        }
+        return analysis
+    except Exception as e:
+        return {"error": f"Error analyzing spreadsheet: {str(e)}"}
+
+def analyze_image_with_gemini(image_path, question="Analyze this image in detail"):
+    """Analyze image using Google Gemini Flash"""
+    try:
+        if not gemini_model:
+            return "Gemini API key not configured. Set GEMINI_API_KEY environment variable."
+        
+        img = Image.open(image_path)
+        response = gemini_model.generate_content([question, img])
+        return response.text
+    except Exception as e:
+        return f"Error analyzing image: {str(e)}"
+
+def analyze_document_with_ai(text, question="Analyze this document and provide key insights"):
+    """Analyze document text using AI"""
+    try:
+        if gemini_model:
+            prompt = f"{question}\n\nDocument Content:\n{text[:10000]}"  # Limit to 10k chars
+            response = gemini_model.generate_content(prompt)
+            return response.text
+        else:
+            # Fallback to existing chat API
+            return get_gpt5_pro_response(f"{question}\n\nDocument: {text[:5000]}")
+    except Exception as e:
+        return f"Error analyzing document: {str(e)}"
+
 def detect_request_type(message):
     """Detect if request is for video, image generation or text chat"""
     message_lower = message.lower()
     
-    # Video generation keywords
     video_keywords = [
         'generate video', 'create video', 'make video', 'video of',
         'animate', 'animation', 'moving', 'motion', 'video clip',
@@ -30,7 +144,6 @@ def detect_request_type(message):
         'runway', 'gen-3', 'text to video', 'video generation'
     ]
     
-    # Image generation keywords
     image_keywords = [
         'generate image', 'create image', 'make image', 'draw', 'paint',
         'generate picture', 'create picture', 'visualize', 'illustrate',
@@ -92,7 +205,6 @@ def clean_prompt(message, content_type='image'):
     """Extract clean prompt for image/video generation"""
     message_lower = message.lower()
     
-    # Remove trigger phrases based on content type
     if content_type == 'video':
         triggers = [
             'generate video of', 'create video of', 'make video of',
@@ -117,35 +229,22 @@ def clean_prompt(message, content_type='image'):
     return prompt
 
 def generate_video_runway(prompt, duration=3):
-    """
-    Generate video using Runway Gen-3 style efficiency
-    Uses Text-to-Video AI model with optimized parameters
-    """
+    """Generate video using Runway Gen-3 style efficiency"""
     try:
-        headers = {
-            "Content-Type": "application/json"
-        }
-        
-        # Enhanced prompt for better video quality
+        headers = {"Content-Type": "application/json"}
         enhanced_prompt = f"{prompt}, high quality, smooth motion, cinematic, 4k resolution"
         
         payload = {
             "inputs": enhanced_prompt,
             "parameters": {
-                "num_frames": duration * 8,  # 8 frames per second
+                "num_frames": duration * 8,
                 "num_inference_steps": 50,
                 "guidance_scale": 9.0,
                 "negative_prompt": "blurry, low quality, distorted, static, choppy motion"
             }
         }
         
-        # Using Hugging Face Text-to-Video API
-        response = requests.post(
-            VIDEO_GEN_API,
-            headers=headers,
-            json=payload,
-            timeout=120  # Video generation takes longer
-        )
+        response = requests.post(VIDEO_GEN_API, headers=headers, json=payload, timeout=120)
         
         if response.status_code == 200:
             video_bytes = response.content
@@ -172,21 +271,13 @@ def generate_video_runway(prompt, duration=3):
                 "error": f"API Error: {response.status_code}",
                 "message": "Video generation service temporarily unavailable"
             }
-            
     except Exception as e:
-        return {
-            "success": False,
-            "error": str(e),
-            "message": "Failed to generate video"
-        }
+        return {"success": False, "error": str(e), "message": "Failed to generate video"}
 
 def generate_image_sd35(prompt):
     """Generate image using Stable Diffusion 3.5 Large"""
     try:
-        headers = {
-            "Content-Type": "application/json"
-        }
-        
+        headers = {"Content-Type": "application/json"}
         payload = {
             "inputs": prompt,
             "parameters": {
@@ -196,12 +287,7 @@ def generate_image_sd35(prompt):
             }
         }
         
-        response = requests.post(
-            IMAGE_GEN_API,
-            headers=headers,
-            json=payload,
-            timeout=60
-        )
+        response = requests.post(IMAGE_GEN_API, headers=headers, json=payload, timeout=60)
         
         if response.status_code == 200:
             image_bytes = response.content
@@ -218,13 +304,8 @@ def generate_image_sd35(prompt):
                 "error": f"API Error: {response.status_code}",
                 "message": "Image generation service temporarily unavailable"
             }
-            
     except Exception as e:
-        return {
-            "success": False,
-            "error": str(e),
-            "message": "Failed to generate image"
-        }
+        return {"success": False, "error": str(e), "message": "Failed to generate image"}
 
 def get_opus_response(question, conversation_history=[]):
     """Opus 4.5 - Fast, general queries"""
@@ -289,34 +370,194 @@ def home():
     """Home endpoint - API status"""
     return jsonify({
         "status": "active",
-        "message": "Quad AI API Router - Chat + Image + Video Generation",
+        "message": "Advanced Multi-Modal AI API - Chat + Image + Video + File Analysis",
         "models": {
             "opus-4.5": "Fast text chat",
             "gpt5-pro": "Complex text tasks",
             "stable-diffusion-3.5-large": "Image generation",
-            "runway-gen-3-style": "Video generation (Text-to-Video)"
+            "runway-gen-3-style": "Video generation",
+            "gemini-1.5-flash": "File & Image analysis"
         },
-        "version": "4.0",
+        "version": "5.0",
         "endpoints": {
             "/": "GET - API status",
             "/chat": "POST - Intelligent routing (text/image/video)",
             "/generate-image": "POST - Direct image generation",
-            "/generate-video": "POST - Direct video generation (Runway Gen-3 style)",
-            "/chat/opus": "POST - Force Opus 4.5",
-            "/chat/gpt5pro": "POST - Force GPT-5 Pro",
+            "/generate-video": "POST - Direct video generation",
+            "/analyze-file": "POST - Analyze uploaded files (images/PDFs/docs/Excel)",
+            "/analyze-image": "POST - Deep image analysis with AI",
+            "/extract-text": "POST - Extract text from documents",
             "/reset": "POST - Reset conversation",
             "/health": "GET - Health check"
         },
+        "supported_files": {
+            "images": ["PNG", "JPG", "JPEG", "GIF", "BMP", "WEBP"],
+            "documents": ["PDF", "DOCX", "TXT"],
+            "spreadsheets": ["XLSX", "XLS", "CSV"]
+        },
         "features": [
-            "Intelligent text/image/video routing",
-            "Quad model support",
-            "Runway Gen-3 style video generation",
-            "Stable Diffusion 3.5 Large",
-            "Conversation history",
-            "Free to use",
-            "Auto detection"
+            "Multi-modal AI routing",
+            "Image analysis with Gemini Flash",
+            "PDF text extraction",
+            "Document analysis",
+            "Excel/CSV data analysis",
+            "Video generation",
+            "Free to use"
         ]
     })
+
+@app.route('/analyze-file', methods=['POST'])
+def analyze_file():
+    """
+    Comprehensive file analysis endpoint
+    Supports: Images, PDFs, Word docs, Excel, CSV
+    """
+    try:
+        if 'file' not in request.files:
+            return jsonify({"error": "No file provided"}), 400
+        
+        file = request.files['file']
+        question = request.form.get('question', 'Analyze this file and provide detailed insights')
+        
+        if file.filename == '':
+            return jsonify({"error": "Empty filename"}), 400
+        
+        if not allowed_file(file.filename):
+            return jsonify({"error": "File type not supported"}), 400
+        
+        filename = secure_filename(file.filename)
+        file_path = os.path.join(UPLOAD_FOLDER, filename)
+        file.save(file_path)
+        
+        file_type = get_file_type(filename)
+        file_ext = filename.rsplit('.', 1)[1].lower()
+        
+        result = {
+            "success": True,
+            "filename": filename,
+            "file_type": file_type,
+            "file_size": os.path.getsize(file_path)
+        }
+        
+        if file_type == 'image':
+            analysis = analyze_image_with_gemini(file_path, question)
+            result["analysis"] = analysis
+            result["model_used"] = "gemini-1.5-flash"
+            
+        elif file_type == 'document':
+            if file_ext == 'pdf':
+                text = extract_text_from_pdf(file_path)
+            elif file_ext == 'docx':
+                text = extract_text_from_docx(file_path)
+            else:
+                text = extract_text_from_txt(file_path)
+            
+            result["extracted_text"] = text[:1000] + "..." if len(text) > 1000 else text
+            result["text_length"] = len(text)
+            result["analysis"] = analyze_document_with_ai(text, question)
+            result["model_used"] = "gemini-1.5-flash" if gemini_model else "gpt5-pro"
+            
+        elif file_type == 'spreadsheet':
+            spreadsheet_data = analyze_spreadsheet(file_path, file_ext)
+            result["data_analysis"] = spreadsheet_data
+            
+            # AI analysis of spreadsheet
+            summary_text = f"Spreadsheet has {spreadsheet_data.get('rows')} rows and {spreadsheet_data.get('columns')} columns. Columns: {', '.join(spreadsheet_data.get('column_names', []))}"
+            result["analysis"] = analyze_document_with_ai(summary_text, question)
+            result["model_used"] = "pandas + AI"
+        
+        # Clean up uploaded file
+        os.remove(file_path)
+        
+        return jsonify(result)
+        
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500
+
+@app.route('/analyze-image', methods=['POST'])
+def analyze_image():
+    """Deep image analysis with custom question"""
+    try:
+        if 'image' not in request.files:
+            return jsonify({"error": "No image provided"}), 400
+        
+        image = request.files['image']
+        question = request.form.get('question', 'Analyze this image in detail and identify any problems or notable features')
+        
+        if image.filename == '':
+            return jsonify({"error": "Empty filename"}), 400
+        
+        filename = secure_filename(image.filename)
+        if not filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS['image']:
+            return jsonify({"error": "Invalid image format"}), 400
+        
+        image_path = os.path.join(UPLOAD_FOLDER, filename)
+        image.save(image_path)
+        
+        analysis = analyze_image_with_gemini(image_path, question)
+        
+        # Get image metadata
+        img = Image.open(image_path)
+        
+        result = {
+            "success": True,
+            "analysis": analysis,
+            "image_info": {
+                "filename": filename,
+                "format": img.format,
+                "size": img.size,
+                "mode": img.mode
+            },
+            "model_used": "gemini-1.5-flash"
+        }
+        
+        os.remove(image_path)
+        return jsonify(result)
+        
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500
+
+@app.route('/extract-text', methods=['POST'])
+def extract_text():
+    """Extract text from PDF or Word documents"""
+    try:
+        if 'file' not in request.files:
+            return jsonify({"error": "No file provided"}), 400
+        
+        file = request.files['file']
+        
+        if file.filename == '':
+            return jsonify({"error": "Empty filename"}), 400
+        
+        filename = secure_filename(file.filename)
+        file_ext = filename.rsplit('.', 1)[1].lower()
+        
+        if file_ext not in ['pdf', 'docx', 'txt']:
+            return jsonify({"error": "Only PDF, DOCX, and TXT files supported"}), 400
+        
+        file_path = os.path.join(UPLOAD_FOLDER, filename)
+        file.save(file_path)
+        
+        if file_ext == 'pdf':
+            text = extract_text_from_pdf(file_path)
+        elif file_ext == 'docx':
+            text = extract_text_from_docx(file_path)
+        else:
+            text = extract_text_from_txt(file_path)
+        
+        result = {
+            "success": True,
+            "filename": filename,
+            "text": text,
+            "text_length": len(text),
+            "word_count": len(text.split())
+        }
+        
+        os.remove(file_path)
+        return jsonify(result)
+        
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500
 
 @app.route('/chat', methods=['POST'])
 def chat():
@@ -334,13 +575,11 @@ def chat():
         if not user_message:
             return jsonify({"error": "Message field is required."}), 400
         
-        # Detect request type: text, image, or video
         request_type = detect_request_type(user_message)
         
         if request_type == 'video':
-            # Video generation request
             prompt = clean_prompt(user_message, 'video')
-            duration = data.get('duration', 3)  # Default 3 seconds
+            duration = data.get('duration', 3)
             result = generate_video_runway(prompt, duration)
             
             if result['success']:
@@ -353,7 +592,7 @@ def chat():
                     "prompt": prompt,
                     "duration": result.get('duration'),
                     "fps": result.get('fps'),
-                    "message": "Video generated successfully! Decode base64 to view MP4."
+                    "message": "Video generated successfully!"
                 })
             else:
                 return jsonify({
@@ -364,7 +603,6 @@ def chat():
                 }), 500
         
         elif request_type == 'image':
-            # Image generation request
             prompt = clean_prompt(user_message, 'image')
             result = generate_image_sd35(prompt)
             
@@ -376,7 +614,7 @@ def chat():
                     "format": "base64",
                     "model_used": "stable-diffusion-3.5-large",
                     "prompt": prompt,
-                    "message": "Image generated successfully! Decode base64 to view."
+                    "message": "Image generated successfully!"
                 })
             else:
                 return jsonify({
@@ -386,7 +624,6 @@ def chat():
                 }), 500
         
         else:
-            # Text chat request
             if user_id not in conversations:
                 conversations[user_id] = []
             
@@ -431,12 +668,10 @@ def generate_image():
     """Direct image generation endpoint"""
     try:
         data = request.json
-        
         if not data:
             return jsonify({"error": "JSON body required"}), 400
         
         prompt = data.get('prompt', '').strip()
-        
         if not prompt:
             return jsonify({"error": "Prompt field is required"}), 400
         
@@ -449,7 +684,7 @@ def generate_image():
                 "format": "base64",
                 "model": "stable-diffusion-3.5-large",
                 "prompt": prompt,
-                "message": "Image generated! Decode base64 to view."
+                "message": "Image generated!"
             })
         else:
             return jsonify({
@@ -457,24 +692,14 @@ def generate_image():
                 "error": result.get('error'),
                 "message": result.get('message')
             }), 500
-            
     except Exception as e:
         return jsonify({"success": False, "error": str(e)}), 500
 
 @app.route('/generate-video', methods=['POST'])
 def generate_video():
-    """
-    Direct video generation endpoint - Runway Gen-3 style
-    
-    Request body:
-    {
-        "prompt": "A cat running in a park",
-        "duration": 3  // optional, default 3 seconds
-    }
-    """
+    """Direct video generation endpoint - Runway Gen-3 style"""
     try:
         data = request.json
-        
         if not data:
             return jsonify({"error": "JSON body required"}), 400
         
@@ -498,11 +723,7 @@ def generate_video():
                 "prompt": prompt,
                 "duration": result['duration'],
                 "fps": result['fps'],
-                "message": "Video generated! Decode base64 to view MP4.",
-                "decoding_info": {
-                    "python": "import base64; video_data = base64.b64decode(video_base64); open('video.mp4', 'wb').write(video_data)",
-                    "javascript": "const videoBlob = new Blob([Uint8Array.from(atob(videoBase64), c => c.charCodeAt(0))], {type: 'video/mp4'})"
-                }
+                "message": "Video generated!"
             })
         else:
             return jsonify({
@@ -511,25 +732,8 @@ def generate_video():
                 "message": result.get('message'),
                 "retry_after": result.get('retry_after')
             }), 500
-            
     except Exception as e:
         return jsonify({"success": False, "error": str(e)}), 500
-
-@app.route('/chat/opus', methods=['POST'])
-def chat_opus():
-    """Force Opus 4.5"""
-    data = request.json if request.json else {}
-    data['model'] = 'opus-4.5'
-    request.json = data
-    return chat()
-
-@app.route('/chat/gpt5pro', methods=['POST'])
-def chat_gpt5pro():
-    """Force GPT-5 Pro"""
-    data = request.json if request.json else {}
-    data['model'] = 'gpt5-pro'
-    request.json = data
-    return chat()
 
 @app.route('/reset', methods=['POST'])
 def reset_conversation():
@@ -566,13 +770,17 @@ def health_check():
             "opus-4.5": "Available",
             "gpt5-pro": "Available",
             "stable-diffusion-3.5": "Available",
-            "runway-gen-3-style": "Available"
+            "runway-gen-3-style": "Available",
+            "gemini-1.5-flash": "Available" if gemini_model else "Not Configured"
         },
         "capabilities": {
             "text_chat": True,
             "image_generation": True,
             "video_generation": True,
-            "multi_modal_routing": True
+            "file_analysis": True,
+            "image_analysis": gemini_model is not None,
+            "document_extraction": True,
+            "spreadsheet_analysis": True
         }
     })
 
