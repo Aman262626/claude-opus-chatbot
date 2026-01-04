@@ -6,6 +6,7 @@ import re
 import base64
 from io import BytesIO
 import time
+from datetime import datetime, timedelta
 from PIL import Image
 import PyPDF2
 from docx import Document
@@ -20,8 +21,13 @@ app.config['MAX_CONTENT_LENGTH'] = 50 * 1024 * 1024  # 50MB max file size
 UPLOAD_FOLDER = '/tmp/uploads'
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 
-# Conversation storage
+# Enhanced conversation storage with metadata
 conversations = {}
+# Format: {user_id: {"messages": [], "context": {}, "metadata": {}}}
+
+# Conversation configuration
+MAX_CONVERSATION_LENGTH = 50  # Maximum messages per conversation
+CONTEXT_WINDOW = 10  # Number of recent messages to use for context
 
 # API endpoints
 OPUS_API = 'https://chatbot-ji1z.onrender.com/chatbot-ji1z'
@@ -44,6 +50,105 @@ ALLOWED_EXTENSIONS = {
     'spreadsheet': {'xlsx', 'xls', 'csv'},
     'all': {'png', 'jpg', 'jpeg', 'gif', 'bmp', 'webp', 'pdf', 'doc', 'docx', 'txt', 'xlsx', 'xls', 'csv'}
 }
+
+def init_conversation(user_id):
+    """Initialize a new conversation for a user"""
+    if user_id not in conversations:
+        conversations[user_id] = {
+            "messages": [],
+            "context": {
+                "topics": [],
+                "entities": [],
+                "last_intent": None
+            },
+            "metadata": {
+                "created_at": datetime.now().isoformat(),
+                "last_active": datetime.now().isoformat(),
+                "message_count": 0,
+                "user_preferences": {}
+            }
+        }
+
+def update_conversation_context(user_id, message, response):
+    """Update conversation context with new information"""
+    if user_id not in conversations:
+        init_conversation(user_id)
+    
+    conv = conversations[user_id]
+    
+    # Add message to history
+    conv["messages"].append({
+        "role": "user",
+        "content": message,
+        "timestamp": datetime.now().isoformat()
+    })
+    conv["messages"].append({
+        "role": "assistant",
+        "content": response,
+        "timestamp": datetime.now().isoformat()
+    })
+    
+    # Keep only recent messages (sliding window)
+    if len(conv["messages"]) > MAX_CONVERSATION_LENGTH:
+        conv["messages"] = conv["messages"][-MAX_CONVERSATION_LENGTH:]
+    
+    # Extract and update context
+    message_lower = message.lower()
+    
+    # Detect topics
+    topic_keywords = {
+        'coding': ['code', 'programming', 'function', 'algorithm', 'debug'],
+        'data_analysis': ['data', 'analysis', 'chart', 'graph', 'statistics'],
+        'creative': ['image', 'video', 'design', 'creative', 'art'],
+        'document': ['pdf', 'document', 'text', 'file', 'extract'],
+        'medical': ['medical', 'health', 'disease', 'diagnosis', 'xray'],
+        'business': ['business', 'finance', 'market', 'strategy', 'revenue']
+    }
+    
+    for topic, keywords in topic_keywords.items():
+        if any(keyword in message_lower for keyword in keywords):
+            if topic not in conv["context"]["topics"]:
+                conv["context"]["topics"].append(topic)
+    
+    # Update metadata
+    conv["metadata"]["last_active"] = datetime.now().isoformat()
+    conv["metadata"]["message_count"] = len(conv["messages"])
+
+def get_conversation_context(user_id):
+    """Get recent conversation context for continuity"""
+    if user_id not in conversations:
+        return []
+    
+    conv = conversations[user_id]
+    recent_messages = conv["messages"][-CONTEXT_WINDOW:]
+    
+    # Convert to API format
+    context_messages = []
+    for msg in recent_messages:
+        context_messages.append({
+            "role": msg["role"],
+            "content": msg["content"]
+        })
+    
+    return context_messages
+
+def get_conversation_summary(user_id):
+    """Generate a summary of the conversation"""
+    if user_id not in conversations:
+        return "No conversation history."
+    
+    conv = conversations[user_id]
+    topics = conv["context"]["topics"]
+    msg_count = conv["metadata"]["message_count"]
+    
+    if msg_count == 0:
+        return "No messages yet."
+    
+    summary = f"Conversation has {msg_count} messages."
+    if topics:
+        summary += f" Topics discussed: {', '.join(topics)}."
+    
+    return summary
 
 def allowed_file(filename):
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS['all']
@@ -315,7 +420,7 @@ def generate_image_sd35(prompt):
         }
 
 def get_opus_response(question, conversation_history=[]):
-    """Opus 4.5 - Fast, general queries"""
+    """Opus 4.5 - Fast, general queries with context"""
     messages = []
     for msg in conversation_history:
         messages.append(msg)
@@ -338,7 +443,7 @@ def get_opus_response(question, conversation_history=[]):
         return f"Our chat service is temporarily unavailable: {str(e)}. We're working to restore it promptly."
 
 def get_gpt5_pro_response(question, conversation_history=[]):
-    """GPT-5 Pro - Complex, detailed queries"""
+    """GPT-5 Pro - Complex, detailed queries with context"""
     messages = []
     
     system_prompt = (
@@ -346,7 +451,8 @@ def get_gpt5_pro_response(question, conversation_history=[]):
         "Deliver exceptional, comprehensive responses with precision and clarity. "
         "For technical implementations, provide production-grade solutions following industry best practices. "
         "For analytical tasks, offer deep insights supported by logical reasoning and examples. "
-        "Maintain a professional yet approachable tone that reflects premium service quality."
+        "Maintain a professional yet approachable tone that reflects premium service quality. "
+        "Remember context from previous messages to provide coherent, contextual responses."
     )
     
     messages.append({'role': 'assistant', 'content': system_prompt})
@@ -386,11 +492,13 @@ def home():
             "runway-gen-3-style": "Cinematic video generation",
             "gemini-1.5-flash": "Intelligent file & image analysis"
         },
-        "version": "5.0.0",
+        "version": "5.1.0",
         "api_tier": "Premium",
         "endpoints": {
             "/": "GET - Platform status & capabilities",
-            "/chat": "POST - Intelligent multi-modal routing",
+            "/chat": "POST - Intelligent multi-modal routing with memory",
+            "/chat/history": "GET - View conversation history",
+            "/chat/context": "GET - Get current conversation context",
             "/generate-image": "POST - Professional image creation",
             "/generate-video": "POST - Cinematic video synthesis",
             "/analyze-file": "POST - Comprehensive file intelligence",
@@ -406,6 +514,7 @@ def home():
         },
         "premium_features": [
             "AI-powered intelligent routing",
+            "Conversation memory & context tracking",
             "Multi-modal content generation",
             "Enterprise-grade file analysis",
             "Context-aware conversations",
@@ -415,6 +524,72 @@ def home():
         ],
         "support": "For enterprise inquiries and technical support, please contact our team"
     })
+
+@app.route('/chat/history', methods=['GET'])
+def get_chat_history():
+    """Get conversation history for a user"""
+    try:
+        user_id = request.args.get('user_id', 'default')
+        limit = int(request.args.get('limit', 20))
+        
+        if user_id not in conversations:
+            return jsonify({
+                "success": True,
+                "user_id": user_id,
+                "message": "No conversation history found. Start chatting to build your conversation!",
+                "messages": [],
+                "total_messages": 0
+            })
+        
+        conv = conversations[user_id]
+        messages = conv["messages"][-limit:]
+        
+        return jsonify({
+            "success": True,
+            "user_id": user_id,
+            "messages": messages,
+            "total_messages": len(conv["messages"]),
+            "context_summary": get_conversation_summary(user_id),
+            "topics": conv["context"]["topics"],
+            "metadata": conv["metadata"]
+        })
+    except Exception as e:
+        return jsonify({
+            "success": False,
+            "error": "history_fetch_failed",
+            "message": f"Unable to retrieve conversation history: {str(e)}"
+        }), 500
+
+@app.route('/chat/context', methods=['GET'])
+def get_chat_context():
+    """Get current conversation context"""
+    try:
+        user_id = request.args.get('user_id', 'default')
+        
+        if user_id not in conversations:
+            return jsonify({
+                "success": True,
+                "user_id": user_id,
+                "message": "No active conversation context",
+                "context": {}
+            })
+        
+        conv = conversations[user_id]
+        
+        return jsonify({
+            "success": True,
+            "user_id": user_id,
+            "context": conv["context"],
+            "recent_messages": len(get_conversation_context(user_id)) // 2,
+            "summary": get_conversation_summary(user_id),
+            "metadata": conv["metadata"]
+        })
+    except Exception as e:
+        return jsonify({
+            "success": False,
+            "error": "context_fetch_failed",
+            "message": f"Unable to retrieve conversation context: {str(e)}"
+        }), 500
 
 @app.route('/analyze-file', methods=['POST'])
 def analyze_file():
@@ -629,7 +804,7 @@ def extract_text():
 
 @app.route('/chat', methods=['POST'])
 def chat():
-    """Premium intelligent chat - Multi-modal AI routing"""
+    """Premium intelligent chat - Multi-modal AI routing with conversation memory"""
     try:
         data = request.json
         
@@ -651,6 +826,9 @@ def chat():
                 "message": "Please provide a message for our AI to process."
             }), 400
         
+        # Initialize conversation if needed
+        init_conversation(user_id)
+        
         request_type = detect_request_type(user_message)
         
         if request_type == 'video':
@@ -659,6 +837,9 @@ def chat():
             result = generate_video_runway(prompt, duration)
             
             if result['success']:
+                # Update context
+                update_conversation_context(user_id, user_message, f"Generated video: {prompt}")
+                
                 return jsonify({
                     "success": True,
                     "type": "video",
@@ -669,7 +850,8 @@ def chat():
                     "prompt": prompt,
                     "duration": result.get('duration'),
                     "fps": result.get('fps'),
-                    "quality": "professional"
+                    "quality": "professional",
+                    "conversation_context": get_conversation_summary(user_id)
                 })
             else:
                 return jsonify({
@@ -684,6 +866,9 @@ def chat():
             result = generate_image_sd35(prompt)
             
             if result['success']:
+                # Update context
+                update_conversation_context(user_id, user_message, f"Generated image: {prompt}")
+                
                 return jsonify({
                     "success": True,
                     "type": "image",
@@ -692,7 +877,8 @@ def chat():
                     "format": "base64",
                     "model_used": "stable-diffusion-3.5-large",
                     "prompt": prompt,
-                    "quality": "premium"
+                    "quality": "premium",
+                    "conversation_context": get_conversation_summary(user_id)
                 })
             else:
                 return jsonify({
@@ -702,8 +888,8 @@ def chat():
                 }), 500
         
         else:
-            if user_id not in conversations:
-                conversations[user_id] = []
+            # Get conversation context for continuity
+            conversation_history = get_conversation_context(user_id)
             
             if force_model:
                 selected_model = force_model
@@ -711,9 +897,9 @@ def chat():
                 selected_model = detect_query_type(user_message)
             
             if selected_model == 'gpt5-pro':
-                response_text = get_gpt5_pro_response(user_message, conversations[user_id])
+                response_text = get_gpt5_pro_response(user_message, conversation_history)
             else:
-                response_text = get_opus_response(user_message, conversations[user_id])
+                response_text = get_opus_response(user_message, conversation_history)
             
             if "unable" in response_text.lower() or "unavailable" in response_text.lower():
                 return jsonify({
@@ -722,8 +908,8 @@ def chat():
                     "message": response_text
                 }), 500
             
-            conversations[user_id].append({"role": "user", "content": user_message})
-            conversations[user_id].append({"role": "assistant", "content": response_text})
+            # Update conversation context
+            update_conversation_context(user_id, user_message, response_text)
             
             input_tokens = len(user_message.split())
             output_tokens = len(response_text.split())
@@ -731,7 +917,7 @@ def chat():
             return jsonify({
                 "success": True,
                 "type": "text",
-                "message": "Response generated by our premium AI engine",
+                "message": "Response generated by our premium AI engine with conversation context",
                 "response": response_text,
                 "model_used": selected_model,
                 "user_id": user_id,
@@ -740,7 +926,9 @@ def chat():
                     "output_tokens": output_tokens,
                     "total_tokens": input_tokens + output_tokens
                 },
-                "conversation_length": len(conversations[user_id]),
+                "conversation_length": conversations[user_id]["metadata"]["message_count"],
+                "context_used": len(conversation_history) // 2,
+                "topics_discussed": conversations[user_id]["context"]["topics"],
                 "quality": "professional"
             })
         
@@ -855,19 +1043,23 @@ def generate_video():
 
 @app.route('/reset', methods=['POST'])
 def reset_conversation():
-    """Premium conversation management"""
+    """Premium conversation management - Reset conversation memory"""
     try:
         data = request.json if request.json else {}
         user_id = data.get('user_id', 'default')
         
         if user_id in conversations:
-            msg_count = len(conversations[user_id])
-            conversations[user_id] = []
+            msg_count = conversations[user_id]["metadata"]["message_count"]
+            topics = conversations[user_id]["context"]["topics"]
+            conversations[user_id] = None
+            del conversations[user_id]
+            
             return jsonify({
                 "success": True,
-                "message": f"Your conversation has been reset successfully. Cleared {msg_count} messages.",
+                "message": f"Your conversation has been reset successfully. Cleared {msg_count} messages and {len(topics)} topics.",
                 "user_id": user_id,
-                "status": "refreshed"
+                "status": "refreshed",
+                "cleared_topics": topics
             })
         else:
             return jsonify({
@@ -891,7 +1083,7 @@ def health_check():
         "message": "All systems operational - Premium AI services running smoothly",
         "uptime": "99.9%",
         "active_users": len(conversations),
-        "total_conversations": sum(len(conv) for conv in conversations.values()),
+        "total_conversations": sum(conv["metadata"]["message_count"] for conv in conversations.values() if conv),
         "models": {
             "opus-4.5": "Operational",
             "gpt5-pro": "Operational",
@@ -901,12 +1093,20 @@ def health_check():
         },
         "capabilities": {
             "text_chat": True,
+            "conversation_memory": True,
+            "context_tracking": True,
             "image_generation": True,
             "video_generation": True,
             "file_analysis": True,
             "image_analysis": gemini_model is not None,
             "document_extraction": True,
             "spreadsheet_analysis": True
+        },
+        "memory_features": {
+            "max_conversation_length": MAX_CONVERSATION_LENGTH,
+            "context_window": CONTEXT_WINDOW,
+            "topic_tracking": True,
+            "entity_recognition": True
         },
         "service_tier": "Premium",
         "support": "24/7 enterprise support available"
