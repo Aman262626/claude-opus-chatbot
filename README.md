@@ -1,47 +1,197 @@
-# 🤖 Intelligent Dual AI API Router
+# 🚀 Triple AI API Router - Chat + Image Generation
 
-**Free AI API** with automatic intelligent routing between **Opus 4.5** and **GPT-5 Pro** equivalent models!
+**Intelligent Multi-Model AI API** with automatic routing for text chat and image generation powered by:
+- **Opus 4.5** - Fast general queries
+- **GPT-5 Pro** - Complex reasoning tasks  
+- **Stable Diffusion 3.5 Large** - Professional image generation
 
-## ✨ Revolutionary Features
+[![Live API](https://img.shields.io/badge/Live-API-success)](https://claude-opus-chatbot-y6kx.onrender.com)
+[![Python](https://img.shields.io/badge/Python-3.9+-blue)](https://python.org)
+[![License](https://img.shields.io/badge/License-MIT-green)](LICENSE)
 
-- 🧠 **Intelligent Auto-Routing** - Automatically selects best model for your query
-- ⚡ **Dual Model Support** - Opus 4.5 (fast) + GPT-5 Pro (complex)
-- 🎯 **Smart Detection** - Analyzes query complexity and routes accordingly
-- 💰 **100% FREE** - No API key needed!
-- 🔄 **Conversation Memory** - Maintains context across messages
-- 🚀 **Production Ready** - Deploy on Render in 2 minutes
+---
 
-## 🎯 How It Works
+## ✨ Features
 
-### Intelligent Routing System
+### 🤖 **Triple Model Support**
+- **Opus 4.5** - Fast responses for general queries
+- **GPT-5 Pro** - Detailed analysis, coding, research
+- **Stable Diffusion 3.5 Large** - High-quality image generation
 
-API **automatically detects** query type and selects best model:
+### 🧠 **Intelligent Routing**
+- Automatically detects text vs image requests
+- Smart model selection based on query complexity
+- Context-aware conversation handling
 
-#### **GPT-5 Pro Equivalent** triggers for:
-- 💻 **Coding tasks**: algorithms, debugging, development
-- 🔬 **Research & Analysis**: scientific, academic work
-- 🧮 **Complex reasoning**: math, logic, proofs
-- 📊 **Professional tasks**: legal, medical, financial
-- 📝 **Long-form content**: essays, reports, documentation
+### 🎨 **Image Generation**
+- Text-to-image with Stable Diffusion 3.5 Large
+- Base64 encoded output
+- Natural language prompts (English + Hindi)
+- Professional quality results
 
-#### **Opus 4.5 Equivalent** triggers for:
-- 💬 **General conversation**: greetings, simple questions
-- ❓ **Quick answers**: definitions, explanations
-- 📚 **Basic info**: "what is", "who is", "where is"
-- ⚡ **Fast queries**: summaries, translations
+### 💬 **Advanced Chat**
+- Conversation memory per user
+- Multi-turn dialogues
+- Token usage tracking
+- Error handling & retries
+
+---
+
+## 🎯 Quick Start
+
+### **Base URL**
+```
+https://claude-opus-chatbot-y6kx.onrender.com
+```
+
+### **1. Text Chat (Auto-Routing)**
+```bash
+curl -X POST https://claude-opus-chatbot-y6kx.onrender.com/chat \
+  -H "Content-Type: application/json" \
+  -d '{
+    "message": "Explain quantum computing",
+    "user_id": "user123"
+  }'
+```
+
+### **2. Image Generation (Auto-Detect)**
+```bash
+curl -X POST https://claude-opus-chatbot-y6kx.onrender.com/chat \
+  -H "Content-Type: application/json" \
+  -d '{
+    "message": "Generate image of a sunset over mountains",
+    "user_id": "user123"
+  }'
+```
+
+### **3. Direct Image Generation**
+```bash
+curl -X POST https://claude-opus-chatbot-y6kx.onrender.com/generate-image \
+  -H "Content-Type: application/json" \
+  -d '{
+    "prompt": "A futuristic city at night with neon lights"
+  }'
+```
+
+---
 
 ## 📡 API Endpoints
 
-### 🎯 Main Endpoint (Auto-Routing)
+### **GET /** - API Status
+Returns API information and available models.
 
-#### POST /chat
-Intelligently routes to best model automatically
-
-**Request:**
 ```json
 {
-  "message": "Write a Python function to calculate fibonacci",
-  "user_id": "user123"  // Optional
+  "status": "active",
+  "message": "Triple AI API Router - Chat + Image Generation",
+  "models": {
+    "opus-4.5": "Fast text chat",
+    "gpt5-pro": "Complex text tasks",
+    "stable-diffusion-3.5-large": "Image generation"
+  },
+  "version": "3.0"
+}
+```
+
+---
+
+### **POST /chat** - Intelligent Routing
+
+**Auto-detects** if request is for text chat or image generation.
+
+#### Request Body:
+```json
+{
+  "message": "Your question or image generation prompt",
+  "user_id": "unique_user_id",  // Optional, default: "default"
+  "model": "opus-4.5"  // Optional: force specific model
+}
+```
+
+#### Text Response:
+```json
+{
+  "success": true,
+  "type": "text",
+  "response": "AI response text...",
+  "model_used": "gpt5-pro",
+  "user_id": "user123",
+  "usage": {
+    "input_tokens": 10,
+    "output_tokens": 150,
+    "total_tokens": 160
+  },
+  "conversation_length": 4
+}
+```
+
+#### Image Response:
+```json
+{
+  "success": true,
+  "type": "image",
+  "image": "iVBORw0KGgoAAAANSUhEUgAA...",  // Base64 encoded
+  "format": "base64",
+  "model_used": "stable-diffusion-3.5-large",
+  "prompt": "sunset over mountains",
+  "message": "Image generated successfully!"
+}
+```
+
+---
+
+### **POST /generate-image** - Direct Image Generation
+
+Direct endpoint for image generation without auto-detection.
+
+#### Request Body:
+```json
+{
+  "prompt": "A detailed description of the image you want"
+}
+```
+
+#### Response:
+```json
+{
+  "success": true,
+  "image": "iVBORw0KGgoAAAANSUhEUgAA...",  // Base64
+  "format": "base64",
+  "model": "stable-diffusion-3.5-large",
+  "prompt": "your prompt",
+  "message": "Image generated! Decode base64 to view."
+}
+```
+
+---
+
+### **POST /chat/opus** - Force Opus 4.5
+
+```json
+{
+  "message": "Quick question",
+  "user_id": "user123"
+}
+```
+
+---
+
+### **POST /chat/gpt5pro** - Force GPT-5 Pro
+
+```json
+{
+  "message": "Write production-ready code for...",
+  "user_id": "user123"
+}
+```
+
+---
+
+### **POST /reset** - Reset Conversation
+
+```json
+{
+  "user_id": "user123"
 }
 ```
 
@@ -49,273 +199,197 @@ Intelligently routes to best model automatically
 ```json
 {
   "success": true,
-  "response": "Here's an optimized Python function...",
-  "model_used": "gpt5-pro",
-  "user_id": "user123",
-  "usage": {
-    "input_tokens": 8,
-    "output_tokens": 150,
-    "total_tokens": 158
-  },
-  "conversation_length": 2,
-  "routing_info": {
-    "auto_selected": true,
-    "reason": "Intelligent query analysis"
+  "message": "Conversation reset. Cleared 6 messages.",
+  "user_id": "user123"
+}
+```
+
+---
+
+### **GET /health** - Health Check
+
+```json
+{
+  "status": "healthy",
+  "active_users": 5,
+  "total_conversations": 42,
+  "models": {
+    "opus-4.5": "Available",
+    "gpt5-pro": "Available",
+    "stable-diffusion-3.5": "Available"
   }
 }
 ```
 
-### 🎨 Force Specific Model
+---
 
-#### POST /chat/opus
-Force Opus 4.5 equivalent (fast responses)
+## 💻 Code Examples
 
-#### POST /chat/gpt5pro
-Force GPT-5 Pro equivalent (detailed responses)
-
-**Request (same format):**
-```json
-{
-  "message": "Your question",
-  "user_id": "user123"
-}
-```
-
-### 🔄 Other Endpoints
-
-#### GET /
-API status and information
-
-#### POST /reset
-Reset conversation history
-```json
-{
-  "user_id": "user123"
-}
-```
-
-#### GET /health
-Health check and statistics
-
-## 🚀 Deploy on Render (FREE!)
-
-### Quick Deploy (2 Minutes)
-
-1. **Fork this repo** to your GitHub
-
-2. **Go to [Render.com](https://render.com)**
-   - Sign up/Login with GitHub
-
-3. **Create Web Service**
-   - Click "New +" → "Web Service"
-   - Connect `claude-opus-chatbot` repository
-
-4. **Configure (Auto-filled)**
-   ```
-   Name: ai-router-api
-   Environment: Python 3
-   Build: pip install -r requirements.txt
-   Start: gunicorn app:app
-   Instance: Free
-   ```
-
-5. **Deploy!**
-   - ✅ No API keys needed
-   - ✅ No environment variables
-   - Just click "Create Web Service"
-
-## 💻 Usage Examples
-
-### Python Example
+### **Python - Text Chat**
 ```python
 import requests
 
-url = "https://your-app.onrender.com/chat"
+url = "https://claude-opus-chatbot-y6kx.onrender.com/chat"
 
-# Example 1: Coding (Auto-routes to GPT-5 Pro)
-payload = {
-    "message": "Create a REST API with Flask for user authentication",
-    "user_id": "dev123"
+data = {
+    "message": "Explain machine learning in simple terms",
+    "user_id": "user123"
 }
 
-response = requests.post(url, json=payload)
+response = requests.post(url, json=data)
 result = response.json()
 
-print(f"Model used: {result['model_used']}")  # gpt5-pro
-print(result['response'])
-
-# Example 2: Simple question (Auto-routes to Opus 4.5)
-payload = {
-    "message": "What is Python?",
-    "user_id": "dev123"
-}
-
-response = requests.post(url, json=payload)
-result = response.json()
-
-print(f"Model used: {result['model_used']}")  # opus-4.5
 print(result['response'])
 ```
 
-### Force Specific Model
+### **Python - Image Generation**
 ```python
-# Force GPT-5 Pro for detailed response
-url = "https://your-app.onrender.com/chat/gpt5pro"
-payload = {"message": "Explain quantum computing"}
+import requests
+import base64
+from PIL import Image
+from io import BytesIO
 
-# Force Opus 4.5 for quick response
-url = "https://your-app.onrender.com/chat/opus"
-payload = {"message": "What is AI?"}
+url = "https://claude-opus-chatbot-y6kx.onrender.com/chat"
+
+data = {
+    "message": "Generate image of a beautiful sunset",
+    "user_id": "user123"
+}
+
+response = requests.post(url, json=data)
+result = response.json()
+
+if result['type'] == 'image':
+    # Decode base64 image
+    image_data = base64.b64decode(result['image'])
+    image = Image.open(BytesIO(image_data))
+    image.save('output.png')
+    print("Image saved as output.png")
 ```
 
-### JavaScript/Node.js
+### **JavaScript - Fetch API**
 ```javascript
-const axios = require('axios');
+const url = 'https://claude-opus-chatbot-y6kx.onrender.com/chat';
 
-const url = 'https://your-app.onrender.com/chat';
-
-// Coding task - Auto-routes to GPT-5 Pro
-const codingQuery = {
-  message: 'Write a sorting algorithm in JavaScript',
-  user_id: 'js_dev'
+const data = {
+  message: 'Write a Python function to sort a list',
+  user_id: 'user123'
 };
 
-axios.post(url, codingQuery)
-  .then(res => {
-    console.log('Model:', res.data.model_used);
-    console.log('Response:', res.data.response);
-  });
+fetch(url, {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify(data)
+})
+.then(response => response.json())
+.then(result => {
+  if (result.type === 'text') {
+    console.log(result.response);
+  } else if (result.type === 'image') {
+    // Display base64 image
+    const img = document.createElement('img');
+    img.src = 'data:image/png;base64,' + result.image;
+    document.body.appendChild(img);
+  }
+});
 ```
 
-### cURL
+### **cURL - Direct Image Generation**
 ```bash
-# Auto-routing
-curl -X POST https://your-app.onrender.com/chat \
+curl -X POST https://claude-opus-chatbot-y6kx.onrender.com/generate-image \
   -H "Content-Type: application/json" \
-  -d '{"message": "Debug this Python code", "user_id": "test"}'
-
-# Force GPT-5 Pro
-curl -X POST https://your-app.onrender.com/chat/gpt5pro \
-  -H "Content-Type: application/json" \
-  -d '{"message": "Analyze this algorithm complexity"}'
+  -d '{
+    "prompt": "A majestic lion in the African savanna at golden hour"
+  }' \
+  | jq -r '.image' \
+  | base64 -d > image.png
 ```
 
-## 🎯 Routing Intelligence Examples
+---
 
-| Query | Detected Model | Reason |
-|-------|----------------|--------|
-| "Write a Python function" | **GPT-5 Pro** | Coding task |
-| "Debug my code" | **GPT-5 Pro** | Technical/complex |
-| "Research paper on AI" | **GPT-5 Pro** | Research task |
-| "Calculate fibonacci" | **GPT-5 Pro** | Algorithm |
-| "Hello, how are you?" | **Opus 4.5** | General chat |
-| "What is Python?" | **Opus 4.5** | Simple definition |
-| "Summarize this" | **Opus 4.5** | Quick task |
-| "Translate to Hindi" | **Opus 4.5** | Fast operation |
+## 🎨 Image Generation Examples
 
-## 🔥 Advanced Features
+### **Trigger Keywords (Auto-Detection)**
 
-### Conversation Context
-```python
-# All messages maintain context per user_id
-url = "https://your-app.onrender.com/chat"
+The API automatically detects image generation requests using these keywords:
 
-# Message 1
-requests.post(url, json={
-    "message": "My name is Aman",
-    "user_id": "aman123"
-})
+**English:**
+- "generate image of"
+- "create image of"
+- "make image"
+- "draw"
+- "paint"
+- "picture of"
+- "photo of"
+- "visualize"
+- "illustrate"
 
-# Message 2 - Remembers context
-response = requests.post(url, json={
-    "message": "What's my name?",
-    "user_id": "aman123"
-})
-# Response: "Your name is Aman"
+**Hindi:**
+- "बनाओ तस्वीर"
+- "तस्वीर बनाओ"
+- "फोटो बनाओ"
+- "इमेज बनाओ"
+
+### **Example Prompts**
+
+```json
+// Example 1: Natural scene
+{
+  "message": "Generate image of a peaceful forest with morning mist"
+}
+
+// Example 2: Character
+{
+  "message": "Create image of a futuristic robot warrior"
+}
+
+// Example 3: Abstract
+{
+  "message": "Paint a colorful abstract art with geometric shapes"
+}
+
+// Example 4: Hindi
+{
+  "message": "एक खूबसूरत पहाड़ की तस्वीर बनाओ"
+}
 ```
 
-### Reset Conversation
-```python
-requests.post("https://your-app.onrender.com/reset", json={
-    "user_id": "aman123"
-})
+---
+
+## 🧠 Intelligent Routing Logic
+
+### **Text Chat Model Selection**
+
+**Opus 4.5** is selected for:
+- Simple questions (who, what, when, where)
+- Definitions and meanings
+- Quick summaries
+- General conversations
+- Translation requests
+
+**GPT-5 Pro** is selected for:
+- Code writing and debugging
+- Complex analysis and research
+- Mathematical problems
+- Technical documentation
+- Step-by-step reasoning
+- Long-form content (>50 words)
+
+### **Image Generation**
+
+Triggered when message contains image-related keywords in any language.
+
+---
+
+## 🔧 Installation (Local Development)
+
+### **Prerequisites**
+```bash
+Python 3.9+
+pip
 ```
 
-### Health Monitoring
-```python
-response = requests.get("https://your-app.onrender.com/health")
-print(response.json())
-# {
-#   "status": "healthy",
-#   "active_users": 10,
-#   "total_conversations": 150,
-#   "models": {"opus-4.5": "Available", "gpt5-pro": "Available"}
-# }
-```
-
-## 🎨 Integration Examples
-
-### Telegram Bot
-```python
-from telegram import Update
-from telegram.ext import Application, MessageHandler, filters
-import requests
-
-API_URL = "https://your-app.onrender.com/chat"
-
-async def handle_message(update: Update, context):
-    user_msg = update.message.text
-    user_id = str(update.message.from_user.id)
-    
-    response = requests.post(API_URL, json={
-        "message": user_msg,
-        "user_id": user_id
-    })
-    
-    result = response.json()
-    model_emoji = "🚀" if result['model_used'] == 'gpt5-pro' else "⚡"
-    
-    await update.message.reply_text(
-        f"{model_emoji} {result['response']}\n\n"
-        f"Model: {result['model_used']}"
-    )
-```
-
-### Discord Bot
-```python
-import discord
-import requests
-
-API_URL = "https://your-app.onrender.com/chat"
-
-@client.event
-async def on_message(message):
-    if message.author == client.user:
-        return
-    
-    response = requests.post(API_URL, json={
-        "message": message.content,
-        "user_id": str(message.author.id)
-    })
-    
-    result = response.json()
-    await message.channel.send(
-        f"**{result['model_used'].upper()}**: {result['response']}"
-    )
-```
-
-## 📊 Performance
-
-| Feature | Opus 4.5 | GPT-5 Pro |
-|---------|----------|----------|
-| **Speed** | ⚡⚡⚡⚡⚡ | ⚡⚡⚡ |
-| **Quality** | 🌟🌟🌟🌟 | 🌟🌟🌟🌟🌟 |
-| **Use Case** | General, Fast | Complex, Detailed |
-| **Response Time** | 1-3 seconds | 3-10 seconds |
-| **Best For** | Chat, Quick info | Code, Analysis |
-
-## 🔧 Local Development
-
+### **Setup**
 ```bash
 # Clone repository
 git clone https://github.com/Aman262626/claude-opus-chatbot.git
@@ -328,58 +402,153 @@ pip install -r requirements.txt
 python app.py
 ```
 
-Access at: `http://localhost:5000`
+### **requirements.txt**
+```txt
+Flask==3.0.0
+requests==2.31.0
+Pillow==10.1.0
+gunicorn==21.2.0
+```
 
-## 🎯 Why This API?
+---
 
-### ✅ Advantages
-- **Smart Routing** - Best model for each query
-- **No API Keys** - Zero setup hassle
-- **Free Forever** - No hidden costs
-- **Context Memory** - Natural conversations
-- **Production Ready** - Stable and reliable
-- **Multi-Model** - Best of both worlds
+## 🌐 Deployment
 
-### 🆚 Comparison
+### **Deploy to Render**
 
-| Feature | This API | Claude Official | OpenAI Official |
-|---------|----------|-----------------|----------------|
-| Cost | **FREE** | $3-25/MTok | $1-120/MTok |
-| API Key | **Not Needed** | Required | Required |
-| Auto-Routing | **Yes** | No | No |
-| Models | **2 Models** | 3 Models | 10+ Models |
-| Setup Time | **1 min** | 10 min | 10 min |
+1. Fork this repository
+2. Connect to Render
+3. Create new Web Service
+4. Deploy automatically
 
-## 🚨 Important Notes
+### **Environment Variables**
+```bash
+PORT=5000  # Auto-set by Render
+```
 
-- Free tier sleeps after 15min inactivity (30-50s wake time)
-- For production, consider paid tier for instant responses
-- No rate limits on free version
-- Supports unlimited concurrent users
+---
 
-## 📄 License
-MIT License - Free to use and modify!
+## 📊 Model Comparison
 
-## 👨‍💻 Author
-Created by **CodeX_Network**
+| Feature | Opus 4.5 | GPT-5 Pro | Stable Diffusion 3.5 |
+|---------|----------|-----------|----------------------|
+| **Speed** | ⚡⚡⚡⚡⚡ | ⚡⚡⚡⚡ | ⚡⚡⚡ |
+| **Quality** | 🏆🏆🏆🏆 | 🏆🏆🏆🏆🏆 | 🏆🏆🏆🏆🏆 |
+| **Best For** | Quick queries | Complex tasks | Image generation |
+| **Token Limit** | ~4000 | ~8000 | N/A |
+| **Response Time** | 1-3s | 3-8s | 10-30s |
+
+---
+
+## ⚠️ Usage Limits
+
+- **Rate Limit:** Fair usage policy
+- **Image Generation:** 60 second timeout
+- **Conversation History:** Per user_id
+- **Image Size:** ~1MB base64 encoded
+
+---
+
+## 🎯 Use Cases
+
+### **Text Chat**
+✅ Customer support bots  
+✅ Educational assistants  
+✅ Code generation  
+✅ Research assistance  
+✅ Content writing  
+
+### **Image Generation**
+✅ Social media content  
+✅ Marketing materials  
+✅ Concept art  
+✅ Product mockups  
+✅ Educational illustrations  
+
+---
+
+## 🔐 Security
+
+- No authentication required (public API)
+- Rate limiting via Render
+- No data storage (stateless)
+- Base64 encoding for images
+- Input validation on all endpoints
+
+---
 
 ## 🤝 Contributing
-Pull requests welcome! Improve the routing algorithm or add features.
 
-## ⭐ Support
-If this helped you, please **star the repository**!
+Contributions welcome! Please:
 
----
-
-## 🎉 Quick Start Summary
-
-1. ✅ Fork this repo
-2. ✅ Deploy on Render (2 minutes)
-3. ✅ No API keys needed
-4. ✅ Start using immediately!
-
-**Deploy now and get your intelligent AI router in minutes!** 🚀
+1. Fork the repository
+2. Create feature branch
+3. Commit changes
+4. Push to branch
+5. Open Pull Request
 
 ---
 
-**Happy Coding!** 🎯
+## 📝 License
+
+MIT License - Free to use for commercial and personal projects.
+
+---
+
+## 👨‍💻 Author
+
+**Aman Gupta**  
+GitHub: [@Aman262626](https://github.com/Aman262626)
+
+---
+
+## 🌟 Star History
+
+If you find this useful, please ⭐ star the repository!
+
+---
+
+## 📞 Support
+
+- **Issues:** [GitHub Issues](https://github.com/Aman262626/claude-opus-chatbot/issues)
+- **Discussions:** [GitHub Discussions](https://github.com/Aman262626/claude-opus-chatbot/discussions)
+
+---
+
+## 🎉 Changelog
+
+### **v3.0** - January 2026
+- ✨ Added Stable Diffusion 3.5 Large image generation
+- 🧠 Intelligent text/image request detection
+- 🎨 Base64 image encoding
+- 🌐 Multi-language prompt support (English + Hindi)
+- 📡 New `/generate-image` endpoint
+
+### **v2.0** - December 2025
+- 🤖 Added GPT-5 Pro model
+- 🧠 Intelligent model routing
+- 💬 Conversation history
+- 📊 Token usage tracking
+
+### **v1.0** - November 2025
+- 🚀 Initial release
+- 🤖 Opus 4.5 support
+- 📡 Basic chat API
+
+---
+
+## 🚀 Roadmap
+
+- [ ] Image-to-Image generation
+- [ ] Batch processing
+- [ ] Webhook support
+- [ ] API key authentication
+- [ ] Rate limiting dashboard
+- [ ] Multi-language UI
+
+---
+
+**Made with ❤️ by Aman Gupta**
+
+[![GitHub](https://img.shields.io/github/stars/Aman262626/claude-opus-chatbot?style=social)](https://github.com/Aman262626/claude-opus-chatbot)
+[![Live Demo](https://img.shields.io/badge/Live-Demo-success)](https://claude-opus-chatbot-y6kx.onrender.com)
