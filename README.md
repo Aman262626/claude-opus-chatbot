@@ -1,197 +1,120 @@
-# 🚀 Triple AI API Router - Chat + Image Generation
+# 🚀 Advanced Multi-Modal AI API
 
-**Intelligent Multi-Model AI API** with automatic routing for text chat and image generation powered by:
-- **Opus 4.5** - Fast general queries
-- **GPT-5 Pro** - Complex reasoning tasks  
-- **Stable Diffusion 3.5 Large** - Professional image generation
+**Version 5.0** - Complete AI Platform with Chat, Image/Video Generation & File Analysis
 
-[![Live API](https://img.shields.io/badge/Live-API-success)](https://claude-opus-chatbot-y6kx.onrender.com)
-[![Python](https://img.shields.io/badge/Python-3.9+-blue)](https://python.org)
-[![License](https://img.shields.io/badge/License-MIT-green)](LICENSE)
+[![Python](https://img.shields.io/badge/Python-3.10+-blue.svg)](https://python.org)
+[![Flask](https://img.shields.io/badge/Flask-3.0.0-green.svg)](https://flask.palletsprojects.com/)
+[![License](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
----
+## 🌟 Features
 
-## ✨ Features
+### **Multi-Modal AI Capabilities**
+- ✅ **Text Chat** - Opus 4.5 & GPT-5 Pro models
+- ✅ **Image Generation** - Stable Diffusion 3.5 Large
+- ✅ **Video Generation** - Runway Gen-3 Style (Text-to-Video)
+- ✅ **Image Analysis** - Deep AI-powered analysis with Gemini Flash
+- ✅ **PDF Extraction** - Extract text from PDF documents
+- ✅ **Word Document Analysis** - DOCX file processing
+- ✅ **Spreadsheet Analysis** - Excel & CSV data analysis
+- ✅ **Intelligent Routing** - Auto-detects request type
 
-### 🤖 **Triple Model Support**
-- **Opus 4.5** - Fast responses for general queries
-- **GPT-5 Pro** - Detailed analysis, coding, research
-- **Stable Diffusion 3.5 Large** - High-quality image generation
+## 📋 Table of Contents
 
-### 🧠 **Intelligent Routing**
-- Automatically detects text vs image requests
-- Smart model selection based on query complexity
-- Context-aware conversation handling
+- [Installation](#installation)
+- [Environment Setup](#environment-setup)
+- [API Endpoints](#api-endpoints)
+- [Usage Examples](#usage-examples)
+- [Supported File Types](#supported-file-types)
+- [Deployment](#deployment)
+- [Error Handling](#error-handling)
 
-### 🎨 **Image Generation**
-- Text-to-image with Stable Diffusion 3.5 Large
-- Base64 encoded output
-- Natural language prompts (English + Hindi)
-- Professional quality results
+## 🔧 Installation
 
-### 💬 **Advanced Chat**
-- Conversation memory per user
-- Multi-turn dialogues
-- Token usage tracking
-- Error handling & retries
+### **Prerequisites**
+- Python 3.10 or higher
+- pip package manager
 
----
+### **Clone Repository**
+```bash
+git clone https://github.com/Aman262626/claude-opus-chatbot.git
+cd claude-opus-chatbot
+```
 
-## 🎯 Quick Start
+### **Install Dependencies**
+```bash
+pip install -r requirements.txt
+```
+
+## 🔑 Environment Setup
+
+### **Required Environment Variable**
+
+For file analysis features, you need a **free** Google Gemini API key:
+
+```bash
+export GEMINI_API_KEY="your_gemini_api_key_here"
+```
+
+### **Get Free Gemini API Key**
+
+1. Visit: [Google AI Studio](https://makersuite.google.com/app/apikey)
+2. Sign in with Google account
+3. Click "Create API Key"
+4. Copy the key
+5. Add to environment variables
+
+**Free Tier Limits:**
+- 15 requests per minute
+- 1500 requests per day
+- No credit card required
+
+### **For Production (Render/Heroku/Railway)**
+
+Add environment variable in platform settings:
+```
+GEMINI_API_KEY = your_api_key_here
+```
+
+## 🌐 API Endpoints
 
 ### **Base URL**
 ```
-https://claude-opus-chatbot-y6kx.onrender.com
+http://localhost:5000  (local)
+https://your-app.onrender.com  (production)
 ```
 
-### **1. Text Chat (Auto-Routing)**
-```bash
-curl -X POST https://claude-opus-chatbot-y6kx.onrender.com/chat \
-  -H "Content-Type: application/json" \
-  -d '{
-    "message": "Explain quantum computing",
-    "user_id": "user123"
-  }'
+### **1. Home - API Status**
+```http
+GET /
 ```
 
-### **2. Image Generation (Auto-Detect)**
-```bash
-curl -X POST https://claude-opus-chatbot-y6kx.onrender.com/chat \
-  -H "Content-Type: application/json" \
-  -d '{
-    "message": "Generate image of a sunset over mountains",
-    "user_id": "user123"
-  }'
-```
-
-### **3. Direct Image Generation**
-```bash
-curl -X POST https://claude-opus-chatbot-y6kx.onrender.com/generate-image \
-  -H "Content-Type: application/json" \
-  -d '{
-    "prompt": "A futuristic city at night with neon lights"
-  }'
-```
-
----
-
-## 📡 API Endpoints
-
-### **GET /** - API Status
-Returns API information and available models.
-
+**Response:**
 ```json
 {
   "status": "active",
-  "message": "Triple AI API Router - Chat + Image Generation",
+  "version": "5.0",
   "models": {
     "opus-4.5": "Fast text chat",
     "gpt5-pro": "Complex text tasks",
-    "stable-diffusion-3.5-large": "Image generation"
-  },
-  "version": "3.0"
+    "stable-diffusion-3.5-large": "Image generation",
+    "runway-gen-3-style": "Video generation",
+    "gemini-1.5-flash": "File & Image analysis"
+  }
 }
 ```
 
----
-
-### **POST /chat** - Intelligent Routing
-
-**Auto-detects** if request is for text chat or image generation.
-
-#### Request Body:
-```json
-{
-  "message": "Your question or image generation prompt",
-  "user_id": "unique_user_id",  // Optional, default: "default"
-  "model": "opus-4.5"  // Optional: force specific model
-}
+### **2. Intelligent Chat**
+```http
+POST /chat
+Content-Type: application/json
 ```
 
-#### Text Response:
+**Request Body:**
 ```json
 {
-  "success": true,
-  "type": "text",
-  "response": "AI response text...",
-  "model_used": "gpt5-pro",
+  "message": "Explain quantum computing",
   "user_id": "user123",
-  "usage": {
-    "input_tokens": 10,
-    "output_tokens": 150,
-    "total_tokens": 160
-  },
-  "conversation_length": 4
-}
-```
-
-#### Image Response:
-```json
-{
-  "success": true,
-  "type": "image",
-  "image": "iVBORw0KGgoAAAANSUhEUgAA...",  // Base64 encoded
-  "format": "base64",
-  "model_used": "stable-diffusion-3.5-large",
-  "prompt": "sunset over mountains",
-  "message": "Image generated successfully!"
-}
-```
-
----
-
-### **POST /generate-image** - Direct Image Generation
-
-Direct endpoint for image generation without auto-detection.
-
-#### Request Body:
-```json
-{
-  "prompt": "A detailed description of the image you want"
-}
-```
-
-#### Response:
-```json
-{
-  "success": true,
-  "image": "iVBORw0KGgoAAAANSUhEUgAA...",  // Base64
-  "format": "base64",
-  "model": "stable-diffusion-3.5-large",
-  "prompt": "your prompt",
-  "message": "Image generated! Decode base64 to view."
-}
-```
-
----
-
-### **POST /chat/opus** - Force Opus 4.5
-
-```json
-{
-  "message": "Quick question",
-  "user_id": "user123"
-}
-```
-
----
-
-### **POST /chat/gpt5pro** - Force GPT-5 Pro
-
-```json
-{
-  "message": "Write production-ready code for...",
-  "user_id": "user123"
-}
-```
-
----
-
-### **POST /reset** - Reset Conversation
-
-```json
-{
-  "user_id": "user123"
+  "model": "gpt5-pro"  // optional: opus-4.5 or gpt5-pro
 }
 ```
 
@@ -199,356 +122,514 @@ Direct endpoint for image generation without auto-detection.
 ```json
 {
   "success": true,
-  "message": "Conversation reset. Cleared 6 messages.",
+  "type": "text",
+  "response": "Quantum computing is...",
+  "model_used": "gpt5-pro",
+  "usage": {
+    "input_tokens": 10,
+    "output_tokens": 150
+  }
+}
+```
+
+### **3. Image Generation**
+```http
+POST /generate-image
+Content-Type: application/json
+```
+
+**Request:**
+```json
+{
+  "prompt": "A futuristic city at sunset"
+}
+```
+
+**Response:**
+```json
+{
+  "success": true,
+  "image": "base64_encoded_image",
+  "format": "base64",
+  "model": "stable-diffusion-3.5-large"
+}
+```
+
+### **4. Video Generation** 🆕
+```http
+POST /generate-video
+Content-Type: application/json
+```
+
+**Request:**
+```json
+{
+  "prompt": "A cat running in a park",
+  "duration": 3  // 1-10 seconds
+}
+```
+
+**Response:**
+```json
+{
+  "success": true,
+  "video": "base64_encoded_video",
+  "format": "base64",
+  "model": "runway-gen-3-style",
+  "duration": 3,
+  "fps": 8
+}
+```
+
+### **5. File Analysis** 🆕
+```http
+POST /analyze-file
+Content-Type: multipart/form-data
+```
+
+**Parameters:**
+- `file`: File to analyze (required)
+- `question`: Custom question (optional)
+
+**Example (curl):**
+```bash
+curl -X POST http://localhost:5000/analyze-file \
+  -F "file=@document.pdf" \
+  -F "question=Summarize the key points"
+```
+
+**Response:**
+```json
+{
+  "success": true,
+  "filename": "document.pdf",
+  "file_type": "document",
+  "extracted_text": "Document content...",
+  "analysis": "Key points: 1. ...",
+  "model_used": "gemini-1.5-flash"
+}
+```
+
+### **6. Image Analysis** 🆕
+```http
+POST /analyze-image
+Content-Type: multipart/form-data
+```
+
+**Parameters:**
+- `image`: Image file (required)
+- `question`: Analysis question (optional)
+
+**Example:**
+```bash
+curl -X POST http://localhost:5000/analyze-image \
+  -F "image=@xray.jpg" \
+  -F "question=What problems do you see?"
+```
+
+**Response:**
+```json
+{
+  "success": true,
+  "analysis": "The X-ray shows...",
+  "image_info": {
+    "filename": "xray.jpg",
+    "format": "JPEG",
+    "size": [1024, 768]
+  },
+  "model_used": "gemini-1.5-flash"
+}
+```
+
+### **7. Text Extraction** 🆕
+```http
+POST /extract-text
+Content-Type: multipart/form-data
+```
+
+**Example:**
+```bash
+curl -X POST http://localhost:5000/extract-text \
+  -F "file=@contract.pdf"
+```
+
+**Response:**
+```json
+{
+  "success": true,
+  "filename": "contract.pdf",
+  "text": "Extracted text content...",
+  "text_length": 5000,
+  "word_count": 850
+}
+```
+
+### **8. Reset Conversation**
+```http
+POST /reset
+Content-Type: application/json
+```
+
+**Request:**
+```json
+{
   "user_id": "user123"
 }
 ```
 
----
+### **9. Health Check**
+```http
+GET /health
+```
 
-### **GET /health** - Health Check
-
+**Response:**
 ```json
 {
   "status": "healthy",
   "active_users": 5,
-  "total_conversations": 42,
   "models": {
     "opus-4.5": "Available",
     "gpt5-pro": "Available",
-    "stable-diffusion-3.5": "Available"
+    "gemini-1.5-flash": "Available"
   }
 }
 ```
 
----
+## 📄 Supported File Types
 
-## 💻 Code Examples
+### **Images**
+- PNG, JPG, JPEG, GIF, BMP, WEBP
+- Max size: 50MB
+- AI-powered analysis with Gemini
 
-### **Python - Text Chat**
+### **Documents**
+- **PDF** - Text extraction & analysis
+- **DOCX** - Word document processing
+- **TXT** - Plain text files
+
+### **Spreadsheets**
+- **XLSX/XLS** - Excel files
+- **CSV** - Comma-separated values
+- Automatic statistical analysis
+
+## 💻 Usage Examples
+
+### **Python Example**
+
 ```python
 import requests
-
-url = "https://claude-opus-chatbot-y6kx.onrender.com/chat"
-
-data = {
-    "message": "Explain machine learning in simple terms",
-    "user_id": "user123"
-}
-
-response = requests.post(url, json=data)
-result = response.json()
-
-print(result['response'])
-```
-
-### **Python - Image Generation**
-```python
-import requests
+import json
 import base64
-from PIL import Image
-from io import BytesIO
 
-url = "https://claude-opus-chatbot-y6kx.onrender.com/chat"
+# Base URL
+API_URL = "http://localhost:5000"
 
-data = {
-    "message": "Generate image of a beautiful sunset",
-    "user_id": "user123"
-}
+# 1. Text Chat
+def chat(message):
+    response = requests.post(f"{API_URL}/chat", json={
+        "message": message,
+        "user_id": "user123"
+    })
+    return response.json()
 
-response = requests.post(url, json=data)
-result = response.json()
-
-if result['type'] == 'image':
+# 2. Generate Image
+def generate_image(prompt):
+    response = requests.post(f"{API_URL}/generate-image", json={
+        "prompt": prompt
+    })
+    data = response.json()
+    
     # Decode base64 image
-    image_data = base64.b64decode(result['image'])
-    image = Image.open(BytesIO(image_data))
-    image.save('output.png')
-    print("Image saved as output.png")
+    if data['success']:
+        img_data = base64.b64decode(data['image'])
+        with open('output.png', 'wb') as f:
+            f.write(img_data)
+    return data
+
+# 3. Analyze Image
+def analyze_image(image_path, question):
+    files = {'image': open(image_path, 'rb')}
+    data = {'question': question}
+    response = requests.post(f"{API_URL}/analyze-image", 
+                           files=files, data=data)
+    return response.json()
+
+# 4. Analyze PDF
+def analyze_pdf(pdf_path, question):
+    files = {'file': open(pdf_path, 'rb')}
+    data = {'question': question}
+    response = requests.post(f"{API_URL}/analyze-file", 
+                           files=files, data=data)
+    return response.json()
+
+# 5. Extract Text from PDF
+def extract_text(pdf_path):
+    files = {'file': open(pdf_path, 'rb')}
+    response = requests.post(f"{API_URL}/extract-text", files=files)
+    return response.json()
+
+# Usage
+if __name__ == "__main__":
+    # Chat example
+    result = chat("Explain AI in simple terms")
+    print(result['response'])
+    
+    # Image generation
+    generate_image("A beautiful sunset")
+    
+    # Image analysis
+    analysis = analyze_image("test.jpg", "What's in this image?")
+    print(analysis['analysis'])
+    
+    # PDF analysis
+    pdf_result = analyze_pdf("document.pdf", "Summarize this")
+    print(pdf_result['analysis'])
 ```
 
-### **JavaScript - Fetch API**
+### **JavaScript Example**
+
 ```javascript
-const url = 'https://claude-opus-chatbot-y6kx.onrender.com/chat';
+const API_URL = 'http://localhost:5000';
 
-const data = {
-  message: 'Write a Python function to sort a list',
-  user_id: 'user123'
-};
+// 1. Text Chat
+async function chat(message) {
+  const response = await fetch(`${API_URL}/chat`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ message, user_id: 'user123' })
+  });
+  return await response.json();
+}
 
-fetch(url, {
-  method: 'POST',
-  headers: { 'Content-Type': 'application/json' },
-  body: JSON.stringify(data)
-})
-.then(response => response.json())
-.then(result => {
-  if (result.type === 'text') {
-    console.log(result.response);
-  } else if (result.type === 'image') {
-    // Display base64 image
+// 2. Analyze File
+async function analyzeFile(file, question) {
+  const formData = new FormData();
+  formData.append('file', file);
+  formData.append('question', question);
+  
+  const response = await fetch(`${API_URL}/analyze-file`, {
+    method: 'POST',
+    body: formData
+  });
+  return await response.json();
+}
+
+// 3. Generate Image
+async function generateImage(prompt) {
+  const response = await fetch(`${API_URL}/generate-image`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ prompt })
+  });
+  const data = await response.json();
+  
+  // Decode base64 image
+  if (data.success) {
     const img = document.createElement('img');
-    img.src = 'data:image/png;base64,' + result.image;
+    img.src = `data:image/png;base64,${data.image}`;
     document.body.appendChild(img);
   }
-});
+  return data;
+}
+
+// Usage
+chat("Hello AI").then(result => console.log(result.response));
 ```
 
-### **cURL - Direct Image Generation**
+### **cURL Examples**
+
 ```bash
-curl -X POST https://claude-opus-chatbot-y6kx.onrender.com/generate-image \
+# 1. Text Chat
+curl -X POST http://localhost:5000/chat \
   -H "Content-Type: application/json" \
-  -d '{
-    "prompt": "A majestic lion in the African savanna at golden hour"
-  }' \
-  | jq -r '.image' \
-  | base64 -d > image.png
+  -d '{"message": "Hello", "user_id": "test"}'
+
+# 2. Generate Image
+curl -X POST http://localhost:5000/generate-image \
+  -H "Content-Type: application/json" \
+  -d '{"prompt": "A beautiful sunset"}'
+
+# 3. Analyze Image
+curl -X POST http://localhost:5000/analyze-image \
+  -F "image=@photo.jpg" \
+  -F "question=What's in this image?"
+
+# 4. Analyze PDF
+curl -X POST http://localhost:5000/analyze-file \
+  -F "file=@document.pdf" \
+  -F "question=Summarize the content"
+
+# 5. Extract Text
+curl -X POST http://localhost:5000/extract-text \
+  -F "file=@document.pdf"
+
+# 6. Health Check
+curl http://localhost:5000/health
 ```
 
----
+## 🚀 Deployment
 
-## 🎨 Image Generation Examples
+### **Local Deployment**
 
-### **Trigger Keywords (Auto-Detection)**
-
-The API automatically detects image generation requests using these keywords:
-
-**English:**
-- "generate image of"
-- "create image of"
-- "make image"
-- "draw"
-- "paint"
-- "picture of"
-- "photo of"
-- "visualize"
-- "illustrate"
-
-**Hindi:**
-- "बनाओ तस्वीर"
-- "तस्वीर बनाओ"
-- "फोटो बनाओ"
-- "इमेज बनाओ"
-
-### **Example Prompts**
-
-```json
-// Example 1: Natural scene
-{
-  "message": "Generate image of a peaceful forest with morning mist"
-}
-
-// Example 2: Character
-{
-  "message": "Create image of a futuristic robot warrior"
-}
-
-// Example 3: Abstract
-{
-  "message": "Paint a colorful abstract art with geometric shapes"
-}
-
-// Example 4: Hindi
-{
-  "message": "एक खूबसूरत पहाड़ की तस्वीर बनाओ"
-}
-```
-
----
-
-## 🧠 Intelligent Routing Logic
-
-### **Text Chat Model Selection**
-
-**Opus 4.5** is selected for:
-- Simple questions (who, what, when, where)
-- Definitions and meanings
-- Quick summaries
-- General conversations
-- Translation requests
-
-**GPT-5 Pro** is selected for:
-- Code writing and debugging
-- Complex analysis and research
-- Mathematical problems
-- Technical documentation
-- Step-by-step reasoning
-- Long-form content (>50 words)
-
-### **Image Generation**
-
-Triggered when message contains image-related keywords in any language.
-
----
-
-## 🔧 Installation (Local Development)
-
-### **Prerequisites**
 ```bash
-Python 3.9+
-pip
-```
+# Set environment variable
+export GEMINI_API_KEY="your_key_here"
 
-### **Setup**
-```bash
-# Clone repository
-git clone https://github.com/Aman262626/claude-opus-chatbot.git
-cd claude-opus-chatbot
-
-# Install dependencies
-pip install -r requirements.txt
-
-# Run locally
+# Run application
 python app.py
+
+# Server starts at http://localhost:5000
 ```
 
-### **requirements.txt**
-```txt
-Flask==3.0.0
-requests==2.31.0
-Pillow==10.1.0
-gunicorn==21.2.0
-```
+### **Render Deployment**
 
----
+1. Push code to GitHub
+2. Go to [Render Dashboard](https://dashboard.render.com/)
+3. Click "New" → "Web Service"
+4. Connect GitHub repository
+5. Configure:
+   - **Build Command**: `pip install -r requirements.txt`
+   - **Start Command**: `gunicorn app:app`
+   - **Environment Variables**:
+     - `GEMINI_API_KEY` = your_api_key
+6. Click "Create Web Service"
 
-## 🌐 Deployment
+### **Heroku Deployment**
 
-### **Deploy to Render**
-
-1. Fork this repository
-2. Connect to Render
-3. Create new Web Service
-4. Deploy automatically
-
-### **Environment Variables**
 ```bash
-PORT=5000  # Auto-set by Render
+# Login to Heroku
+heroku login
+
+# Create app
+heroku create your-app-name
+
+# Set environment variable
+heroku config:set GEMINI_API_KEY=your_key_here
+
+# Deploy
+git push heroku main
+
+# Open app
+heroku open
 ```
 
----
+### **Railway Deployment**
 
-## 📊 Model Comparison
+1. Visit [Railway.app](https://railway.app/)
+2. Click "New Project" → "Deploy from GitHub"
+3. Select repository
+4. Add environment variable: `GEMINI_API_KEY`
+5. Deploy automatically
 
-| Feature | Opus 4.5 | GPT-5 Pro | Stable Diffusion 3.5 |
-|---------|----------|-----------|----------------------|
-| **Speed** | ⚡⚡⚡⚡⚡ | ⚡⚡⚡⚡ | ⚡⚡⚡ |
-| **Quality** | 🏆🏆🏆🏆 | 🏆🏆🏆🏆🏆 | 🏆🏆🏆🏆🏆 |
-| **Best For** | Quick queries | Complex tasks | Image generation |
-| **Token Limit** | ~4000 | ~8000 | N/A |
-| **Response Time** | 1-3s | 3-8s | 10-30s |
+## ⚠️ Error Handling
 
----
+### **Common Errors**
 
-## ⚠️ Usage Limits
+**1. Gemini API Not Configured**
+```json
+{
+  "analysis": "Gemini API key not configured. Set GEMINI_API_KEY environment variable."
+}
+```
+**Solution:** Set `GEMINI_API_KEY` environment variable
 
-- **Rate Limit:** Fair usage policy
-- **Image Generation:** 60 second timeout
-- **Conversation History:** Per user_id
-- **Image Size:** ~1MB base64 encoded
+**2. File Too Large**
+```json
+{
+  "error": "File size exceeds 50MB limit"
+}
+```
+**Solution:** Compress file or use smaller files
 
----
+**3. Unsupported File Type**
+```json
+{
+  "error": "File type not supported"
+}
+```
+**Solution:** Use supported formats (PNG, JPG, PDF, DOCX, XLSX, CSV)
+
+**4. Model Loading (Video Generation)**
+```json
+{
+  "success": false,
+  "error": "Model loading",
+  "retry_after": 30
+}
+```
+**Solution:** Wait 20-30 seconds and retry
+
+## 📊 API Response Codes
+
+- `200` - Success
+- `400` - Bad Request (missing parameters)
+- `500` - Server Error
+- `503` - Service Unavailable (model loading)
+
+## 🔒 Security Notes
+
+- Store API keys in environment variables
+- Never commit API keys to GitHub
+- Use HTTPS in production
+- Implement rate limiting for public APIs
+- Validate all file uploads
 
 ## 🎯 Use Cases
 
-### **Text Chat**
-✅ Customer support bots  
-✅ Educational assistants  
-✅ Code generation  
-✅ Research assistance  
-✅ Content writing  
+### **Medical Analysis**
+- X-ray interpretation
+- Medical report analysis
+- Symptom documentation
 
-### **Image Generation**
-✅ Social media content  
-✅ Marketing materials  
-✅ Concept art  
-✅ Product mockups  
-✅ Educational illustrations  
+### **Document Processing**
+- Contract summarization
+- Legal document analysis
+- Research paper extraction
 
----
+### **Data Analysis**
+- Excel report analysis
+- CSV data insights
+- Statistical summaries
 
-## 🔐 Security
+### **Creative Content**
+- Image generation
+- Video creation
+- Story writing
 
-- No authentication required (public API)
-- Rate limiting via Render
-- No data storage (stateless)
-- Base64 encoding for images
-- Input validation on all endpoints
+## 📈 Performance
 
----
+- **Chat Response**: ~1-3 seconds
+- **Image Generation**: ~5-10 seconds
+- **Video Generation**: ~30-60 seconds
+- **File Analysis**: ~2-5 seconds
+- **PDF Extraction**: ~1-3 seconds
 
 ## 🤝 Contributing
 
-Contributions welcome! Please:
-
-1. Fork the repository
-2. Create feature branch
-3. Commit changes
-4. Push to branch
-5. Open Pull Request
-
----
+Contributions welcome! Feel free to:
+- Report bugs
+- Suggest features
+- Submit pull requests
 
 ## 📝 License
 
-MIT License - Free to use for commercial and personal projects.
+MIT License - Free to use for personal and commercial projects
+
+## 📧 Support
+
+For issues or questions:
+- Create GitHub Issue
+- Check documentation
+- Review examples
+
+## 🌟 Star This Repo!
+
+If you find this useful, please give it a ⭐️!
 
 ---
 
-## 👨‍💻 Author
+**Built with ❤️ by Aman262626**
 
-**Aman Gupta**  
-GitHub: [@Aman262626](https://github.com/Aman262626)
-
----
-
-## 🌟 Star History
-
-If you find this useful, please ⭐ star the repository!
-
----
-
-## 📞 Support
-
-- **Issues:** [GitHub Issues](https://github.com/Aman262626/claude-opus-chatbot/issues)
-- **Discussions:** [GitHub Discussions](https://github.com/Aman262626/claude-opus-chatbot/discussions)
-
----
-
-## 🎉 Changelog
-
-### **v3.0** - January 2026
-- ✨ Added Stable Diffusion 3.5 Large image generation
-- 🧠 Intelligent text/image request detection
-- 🎨 Base64 image encoding
-- 🌐 Multi-language prompt support (English + Hindi)
-- 📡 New `/generate-image` endpoint
-
-### **v2.0** - December 2025
-- 🤖 Added GPT-5 Pro model
-- 🧠 Intelligent model routing
-- 💬 Conversation history
-- 📊 Token usage tracking
-
-### **v1.0** - November 2025
-- 🚀 Initial release
-- 🤖 Opus 4.5 support
-- 📡 Basic chat API
-
----
-
-## 🚀 Roadmap
-
-- [ ] Image-to-Image generation
-- [ ] Batch processing
-- [ ] Webhook support
-- [ ] API key authentication
-- [ ] Rate limiting dashboard
-- [ ] Multi-language UI
-
----
-
-**Made with ❤️ by Aman Gupta**
-
-[![GitHub](https://img.shields.io/github/stars/Aman262626/claude-opus-chatbot?style=social)](https://github.com/Aman262626/claude-opus-chatbot)
-[![Live Demo](https://img.shields.io/badge/Live-Demo-success)](https://claude-opus-chatbot-y6kx.onrender.com)
+**Version**: 5.0  
+**Last Updated**: January 2026  
+**Status**: Active Development
