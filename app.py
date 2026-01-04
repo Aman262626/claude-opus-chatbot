@@ -16,17 +16,31 @@ conversations = {}
 OPUS_API = 'https://chatbot-ji1z.onrender.com/chatbot-ji1z'
 GPT5_PRO_API = 'https://chatbot-ji1z.onrender.com/chatbot-ji1z'
 IMAGE_GEN_API = 'https://api-inference.huggingface.co/models/stabilityai/stable-diffusion-3.5-large'
+VIDEO_GEN_API = 'https://api-inference.huggingface.co/models/ali-vilab/text-to-video-ms-1.7b'
 
 def detect_request_type(message):
-    """Detect if request is for image generation or text chat"""
+    """Detect if request is for video, image generation or text chat"""
     message_lower = message.lower()
     
+    # Video generation keywords
+    video_keywords = [
+        'generate video', 'create video', 'make video', 'video of',
+        'animate', 'animation', 'moving', 'motion', 'video clip',
+        'वीडियो बनाओ', 'एनीमेशन बनाओ', 'मूवमेंट', 'वीडियो क्लिप',
+        'runway', 'gen-3', 'text to video', 'video generation'
+    ]
+    
+    # Image generation keywords
     image_keywords = [
         'generate image', 'create image', 'make image', 'draw', 'paint',
         'generate picture', 'create picture', 'visualize', 'illustrate',
         'image of', 'picture of', 'photo of', 'render', 'design image',
         'बनाओ तस्वीर', 'तस्वीर बनाओ', 'फोटो बनाओ', 'इमेज बनाओ'
     ]
+    
+    for keyword in video_keywords:
+        if keyword in message_lower:
+            return 'video'
     
     for keyword in image_keywords:
         if keyword in message_lower:
@@ -74,32 +88,101 @@ def detect_query_type(question):
     
     return 'gpt5-pro' if gpt5_score > opus_score else 'opus-4.5'
 
-def clean_prompt(message):
-    """Extract clean prompt for image generation"""
+def clean_prompt(message, content_type='image'):
+    """Extract clean prompt for image/video generation"""
     message_lower = message.lower()
     
-    # Remove trigger phrases
-    triggers = [
-        'generate image of', 'create image of', 'make image of',
-        'generate picture of', 'create picture of', 'draw',
-        'paint', 'image of', 'picture of', 'photo of',
-        'बनाओ तस्वीर', 'तस्वीर बनाओ', 'फोटो बनाओ'
-    ]
+    # Remove trigger phrases based on content type
+    if content_type == 'video':
+        triggers = [
+            'generate video of', 'create video of', 'make video of',
+            'video of', 'animate', 'animation of', 'वीडियो बनाओ',
+            'runway', 'gen-3'
+        ]
+    else:
+        triggers = [
+            'generate image of', 'create image of', 'make image of',
+            'generate picture of', 'create picture of', 'draw',
+            'paint', 'image of', 'picture of', 'photo of',
+            'बनाओ तस्वीर', 'तस्वीर बनाओ', 'फोटो बनाओ'
+        ]
     
     prompt = message
     for trigger in triggers:
         if trigger in message_lower:
-            # Find trigger position and extract after it
             idx = message_lower.find(trigger)
             prompt = message[idx + len(trigger):].strip()
             break
     
     return prompt
 
-def generate_image_sd35(prompt):
-    """Generate image using Stable Diffusion 3.5 Large (Free API)"""
+def generate_video_runway(prompt, duration=3):
+    """
+    Generate video using Runway Gen-3 style efficiency
+    Uses Text-to-Video AI model with optimized parameters
+    """
     try:
-        # Using free Hugging Face Inference API
+        headers = {
+            "Content-Type": "application/json"
+        }
+        
+        # Enhanced prompt for better video quality
+        enhanced_prompt = f"{prompt}, high quality, smooth motion, cinematic, 4k resolution"
+        
+        payload = {
+            "inputs": enhanced_prompt,
+            "parameters": {
+                "num_frames": duration * 8,  # 8 frames per second
+                "num_inference_steps": 50,
+                "guidance_scale": 9.0,
+                "negative_prompt": "blurry, low quality, distorted, static, choppy motion"
+            }
+        }
+        
+        # Using Hugging Face Text-to-Video API
+        response = requests.post(
+            VIDEO_GEN_API,
+            headers=headers,
+            json=payload,
+            timeout=120  # Video generation takes longer
+        )
+        
+        if response.status_code == 200:
+            video_bytes = response.content
+            video_base64 = base64.b64encode(video_bytes).decode('utf-8')
+            return {
+                "success": True,
+                "video": video_base64,
+                "format": "base64",
+                "model": "text-to-video-ms-1.7b",
+                "style": "runway-gen-3",
+                "duration": duration,
+                "fps": 8
+            }
+        elif response.status_code == 503:
+            return {
+                "success": False,
+                "error": "Model loading",
+                "message": "Video generation model is loading. Please try again in 20-30 seconds.",
+                "retry_after": 30
+            }
+        else:
+            return {
+                "success": False,
+                "error": f"API Error: {response.status_code}",
+                "message": "Video generation service temporarily unavailable"
+            }
+            
+    except Exception as e:
+        return {
+            "success": False,
+            "error": str(e),
+            "message": "Failed to generate video"
+        }
+
+def generate_image_sd35(prompt):
+    """Generate image using Stable Diffusion 3.5 Large"""
+    try:
         headers = {
             "Content-Type": "application/json"
         }
@@ -113,7 +196,6 @@ def generate_image_sd35(prompt):
             }
         }
         
-        # Try Hugging Face API
         response = requests.post(
             IMAGE_GEN_API,
             headers=headers,
@@ -122,9 +204,7 @@ def generate_image_sd35(prompt):
         )
         
         if response.status_code == 200:
-            # Image returned as binary
             image_bytes = response.content
-            # Convert to base64
             img_base64 = base64.b64encode(image_bytes).decode('utf-8')
             return {
                 "success": True,
@@ -147,7 +227,7 @@ def generate_image_sd35(prompt):
         }
 
 def get_opus_response(question, conversation_history=[]):
-    """Opus 4.5 equivalent - Fast, general queries"""
+    """Opus 4.5 - Fast, general queries"""
     messages = []
     for msg in conversation_history:
         messages.append(msg)
@@ -170,7 +250,7 @@ def get_opus_response(question, conversation_history=[]):
         return f"Error: {str(e)}"
 
 def get_gpt5_pro_response(question, conversation_history=[]):
-    """GPT-5 Pro equivalent - Complex, detailed queries"""
+    """GPT-5 Pro - Complex, detailed queries"""
     messages = []
     
     system_prompt = (
@@ -209,25 +289,28 @@ def home():
     """Home endpoint - API status"""
     return jsonify({
         "status": "active",
-        "message": "Triple AI API Router - Chat + Image Generation",
+        "message": "Quad AI API Router - Chat + Image + Video Generation",
         "models": {
             "opus-4.5": "Fast text chat",
             "gpt5-pro": "Complex text tasks",
-            "stable-diffusion-3.5-large": "Image generation"
+            "stable-diffusion-3.5-large": "Image generation",
+            "runway-gen-3-style": "Video generation (Text-to-Video)"
         },
-        "version": "3.0",
+        "version": "4.0",
         "endpoints": {
             "/": "GET - API status",
-            "/chat": "POST - Intelligent routing (text/image)",
+            "/chat": "POST - Intelligent routing (text/image/video)",
             "/generate-image": "POST - Direct image generation",
+            "/generate-video": "POST - Direct video generation (Runway Gen-3 style)",
             "/chat/opus": "POST - Force Opus 4.5",
             "/chat/gpt5pro": "POST - Force GPT-5 Pro",
             "/reset": "POST - Reset conversation",
             "/health": "GET - Health check"
         },
         "features": [
-            "Intelligent text/image routing",
-            "Triple model support",
+            "Intelligent text/image/video routing",
+            "Quad model support",
+            "Runway Gen-3 style video generation",
             "Stable Diffusion 3.5 Large",
             "Conversation history",
             "Free to use",
@@ -237,7 +320,7 @@ def home():
 
 @app.route('/chat', methods=['POST'])
 def chat():
-    """Intelligent chat endpoint - Auto-detects text or image request"""
+    """Intelligent chat endpoint - Auto-detects text, image or video request"""
     try:
         data = request.json
         
@@ -251,12 +334,38 @@ def chat():
         if not user_message:
             return jsonify({"error": "Message field is required."}), 400
         
-        # Detect if image generation or text chat
+        # Detect request type: text, image, or video
         request_type = detect_request_type(user_message)
         
-        if request_type == 'image':
+        if request_type == 'video':
+            # Video generation request
+            prompt = clean_prompt(user_message, 'video')
+            duration = data.get('duration', 3)  # Default 3 seconds
+            result = generate_video_runway(prompt, duration)
+            
+            if result['success']:
+                return jsonify({
+                    "success": True,
+                    "type": "video",
+                    "video": result['video'],
+                    "format": "base64",
+                    "model_used": "runway-gen-3-style",
+                    "prompt": prompt,
+                    "duration": result.get('duration'),
+                    "fps": result.get('fps'),
+                    "message": "Video generated successfully! Decode base64 to view MP4."
+                })
+            else:
+                return jsonify({
+                    "success": False,
+                    "error": result.get('error'),
+                    "message": result.get('message'),
+                    "retry_after": result.get('retry_after')
+                }), 500
+        
+        elif request_type == 'image':
             # Image generation request
-            prompt = clean_prompt(user_message)
+            prompt = clean_prompt(user_message, 'image')
             result = generate_image_sd35(prompt)
             
             if result['success']:
@@ -352,6 +461,60 @@ def generate_image():
     except Exception as e:
         return jsonify({"success": False, "error": str(e)}), 500
 
+@app.route('/generate-video', methods=['POST'])
+def generate_video():
+    """
+    Direct video generation endpoint - Runway Gen-3 style
+    
+    Request body:
+    {
+        "prompt": "A cat running in a park",
+        "duration": 3  // optional, default 3 seconds
+    }
+    """
+    try:
+        data = request.json
+        
+        if not data:
+            return jsonify({"error": "JSON body required"}), 400
+        
+        prompt = data.get('prompt', '').strip()
+        duration = data.get('duration', 3)
+        
+        if not prompt:
+            return jsonify({"error": "Prompt field is required"}), 400
+        
+        if duration < 1 or duration > 10:
+            return jsonify({"error": "Duration must be between 1-10 seconds"}), 400
+        
+        result = generate_video_runway(prompt, duration)
+        
+        if result['success']:
+            return jsonify({
+                "success": True,
+                "video": result['video'],
+                "format": "base64",
+                "model": "runway-gen-3-style",
+                "prompt": prompt,
+                "duration": result['duration'],
+                "fps": result['fps'],
+                "message": "Video generated! Decode base64 to view MP4.",
+                "decoding_info": {
+                    "python": "import base64; video_data = base64.b64decode(video_base64); open('video.mp4', 'wb').write(video_data)",
+                    "javascript": "const videoBlob = new Blob([Uint8Array.from(atob(videoBase64), c => c.charCodeAt(0))], {type: 'video/mp4'})"
+                }
+            })
+        else:
+            return jsonify({
+                "success": False,
+                "error": result.get('error'),
+                "message": result.get('message'),
+                "retry_after": result.get('retry_after')
+            }), 500
+            
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500
+
 @app.route('/chat/opus', methods=['POST'])
 def chat_opus():
     """Force Opus 4.5"""
@@ -402,7 +565,14 @@ def health_check():
         "models": {
             "opus-4.5": "Available",
             "gpt5-pro": "Available",
-            "stable-diffusion-3.5": "Available"
+            "stable-diffusion-3.5": "Available",
+            "runway-gen-3-style": "Available"
+        },
+        "capabilities": {
+            "text_chat": True,
+            "image_generation": True,
+            "video_generation": True,
+            "multi_modal_routing": True
         }
     })
 
