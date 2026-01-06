@@ -1,11 +1,8 @@
-# NEW: Integrated API with Live Conversation (Voice Chat) Feature
-web: gunicorn app_with_live:app
+# FastAPI v9.0 - High Performance Async API
+web: uvicorn app:app --host 0.0.0.0 --port $PORT --workers 2
 
-# Alternative: Original Opus API (without live conversation)
-# web: gunicorn app:app
+# Alternative: With more workers for better performance
+# web: uvicorn app:app --host 0.0.0.0 --port $PORT --workers 4
 
-# Alternative: FREE Claude 3.5 Sonnet API
-# web: gunicorn claude_free_api:app
-
-# Alternative: Premium Claude Sonnet API
-# web: gunicorn claude_sonnet_api:app
+# Alternative: With auto-reload (development only)
+# web: uvicorn app:app --host 0.0.0.0 --port $PORT --reload
