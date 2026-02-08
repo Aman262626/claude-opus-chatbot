@@ -8,8 +8,8 @@ aiohttp==3.9.1
 requests==2.31.0
 
 # Image Processing (for Vision Analysis)
-Pillow==10.2.0
+# Using newer version compatible with Python 3.13
+Pillow>=10.0.0
 
 # Additional Utilities
-python-multipart==0.0.6  # For file uploads
-python-jose[cryptography]==3.3.0  # For JWT (optional)
+python-multipart==0.0.6
