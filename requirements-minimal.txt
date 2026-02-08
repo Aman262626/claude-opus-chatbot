@@ -1,0 +1,17 @@
+# Minimal Requirements (Without Image Processing)
+# Use this if Pillow installation fails
+
+# Core FastAPI Framework
+fastapi==0.109.0
+uvicorn[standard]==0.27.0
+pydantic==2.5.3
+
+# Async HTTP & Requests
+aiohttp==3.9.1
+requests==2.31.0
+
+# Additional Utilities
+python-multipart==0.0.6
+
+# Note: Vision analysis features will be disabled without Pillow
+# All other features (chat, reasoning, tools) will work fine
