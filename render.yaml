@@ -1,19 +1,22 @@
 # Render Configuration for Claude Opus 4.5 Enhanced
-# Automatic deployment configuration
+# Optimized for fast deployment without compilation
 
 services:
   # Main API Service
   - type: web
     name: claude-opus-enhanced
     env: python
-    region: singapore  # or oregon/frankfurt
-    plan: free  # Free tier
+    region: singapore
+    plan: free
     branch: main
     
-    # Python Runtime
-    runtime: python
-    buildCommand: pip install --upgrade pip && pip install -r requirements.txt
-    startCommand: uvicorn claude_opus_enhanced:app --host 0.0.0.0 --port $PORT --workers 1
+    # Optimized Build Command (uses only pre-built wheels)
+    buildCommand: |
+      python -m pip install --upgrade pip
+      pip install --only-binary=:all: -r requirements.txt || pip install -r requirements.txt
+    
+    # Start Command
+    startCommand: uvicorn claude_opus_enhanced:app --host 0.0.0.0 --port $PORT --workers 1 --log-level info
     
     # Environment Variables
     envVars:
