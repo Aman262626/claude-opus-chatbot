@@ -1,9 +1,34 @@
+# Render Configuration for Claude Opus 4.5 Enhanced
+# Automatic deployment configuration
+
 services:
+  # Main API Service
   - type: web
-    name: claude-opus-chatbot
+    name: claude-opus-enhanced
     env: python
-    plan: free
+    region: singapore  # or oregon/frankfurt
+    plan: free  # Free tier
     branch: main
-    buildCommand: pip install -r requirements.txt
-    startCommand: gunicorn app:app --bind 0.0.0.0:$PORT
+    
+    # Build Configuration
+    buildCommand: |
+      pip install --upgrade pip
+      pip install -r requirements.txt
+    
+    # Start Command
+    startCommand: uvicorn claude_opus_enhanced:app --host 0.0.0.0 --port $PORT --workers 1
+    
+    # Environment Variables (Optional)
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.10.0
+      - key: PORT
+        generateValue: true
+      - key: LOG_LEVEL
+        value: info
+    
+    # Health Check
     healthCheckPath: /health
+    
+    # Auto-deploy on push
+    autoDeploy: true
