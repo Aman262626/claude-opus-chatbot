@@ -10,22 +10,17 @@ services:
     plan: free  # Free tier
     branch: main
     
-    # Build Configuration
-    buildCommand: |
-      pip install --upgrade pip
-      pip install -r requirements.txt
-    
-    # Start Command
+    # Python Runtime
+    runtime: python
+    buildCommand: pip install --upgrade pip && pip install -r requirements.txt
     startCommand: uvicorn claude_opus_enhanced:app --host 0.0.0.0 --port $PORT --workers 1
     
-    # Environment Variables (Optional)
+    # Environment Variables
     envVars:
       - key: PYTHON_VERSION
-        value: 3.10.0
+        value: 3.11.0
       - key: PORT
         generateValue: true
-      - key: LOG_LEVEL
-        value: info
     
     # Health Check
     healthCheckPath: /health
