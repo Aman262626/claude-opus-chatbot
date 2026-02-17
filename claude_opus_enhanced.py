@@ -19,6 +19,8 @@ from datetime import datetime, timedelta
 from io import BytesIO
 import hashlib
 from enum import Enum
+from html import unescape
+from urllib.parse import quote_plus
 
 # ============================================================================
 # FastAPI App Configuration
@@ -64,7 +66,29 @@ AVAILABLE_TOOLS = {
     "image_analyzer": "Analyze images and extract information",
     "crypto_prices": "Get cryptocurrency prices",
     "weather": "Get weather information",
-    "translator": "Translate text between languages"
+    "translator": "Translate text between languages",
+    "app_architect": "Plan and scaffold production-grade apps with preview strategy",
+    "prompt_optimizer": "Improve prompts for better coding and agent outputs",
+    "code_reviewer": "Review code for bugs, security issues, and performance",
+    "workflow_planner": "Create phased execution plans for building complex apps"
+}
+
+APP_BUILD_TEMPLATES: Dict[str, Dict[str, Any]] = {
+    "react": {
+        "ui": ["tailwind", "shadcn-ui", "material-ui"],
+        "backend": ["fastapi", "node-express"],
+        "deployment": ["render", "vercel", "netlify"],
+    },
+    "nextjs": {
+        "ui": ["tailwind", "shadcn-ui", "chakra-ui"],
+        "backend": ["next-api-routes", "fastapi"],
+        "deployment": ["vercel", "render"],
+    },
+    "vue": {
+        "ui": ["tailwind", "vuetify"],
+        "backend": ["fastapi", "node-express"],
+        "deployment": ["render", "netlify"],
+    }
 }
 
 # ============================================================================
@@ -94,6 +118,10 @@ class ChatRequest(BaseModel):
     enable_vision: Optional[bool] = Field(default=False)
     enable_tools: Optional[bool] = Field(default=True)
     image_base64: Optional[str] = Field(default=None)
+    app_builder_mode: Optional[bool] = Field(default=False)
+    target_framework: Optional[str] = Field(default="react")
+    include_backend: Optional[bool] = Field(default=True)
+    preferred_language: Optional[str] = Field(default="hinglish")
     
     class Config:
         schema_extra = {
@@ -121,6 +149,22 @@ class DeepReasoningRequest(BaseModel):
     reasoning_steps: Optional[int] = Field(default=5, ge=3, le=20)
     user_id: Optional[str] = Field(default="default")
 
+class AppBuildRequest(BaseModel):
+    product_idea: str = Field(..., min_length=15, description="Describe the app you want to build")
+    user_id: Optional[str] = Field(default="default")
+    target_framework: Optional[str] = Field(default="react")
+    include_backend: Optional[bool] = Field(default=True)
+    include_auth: Optional[bool] = Field(default=False)
+    ui_library: Optional[str] = Field(default="tailwind")
+    deployment_target: Optional[str] = Field(default="render")
+    generate_tests: Optional[bool] = Field(default=True)
+
+class WorkflowPlanRequest(BaseModel):
+    goal: str = Field(..., min_length=10, description="High-level build goal")
+    constraints: Optional[str] = Field(default="")
+    tech_stack: Optional[str] = Field(default="react + fastapi")
+    user_id: Optional[str] = Field(default="default")
+
 class ChatResponse(BaseModel):
     success: bool
     response: str
@@ -131,6 +175,8 @@ class ChatResponse(BaseModel):
     tools_used: List[str] = []
     confidence_score: Optional[float] = None
     fact_checked: bool = False
+    build_mode: bool = False
+    build_artifacts: Optional[Dict[str, Any]] = None
     timestamp: str
 
 # ============================================================================
@@ -219,7 +265,7 @@ def init_conversation(user_id: str):
         conversations[user_id] = {
             "messages": [],  # Can store up to 200 messages
             "context": {
-                "language": "en",
+                "language": "hinglish",
                 "reasoning_history": [],
                 "facts_verified": [],
                 "tools_used": [],
@@ -324,6 +370,15 @@ async def execute_tool(tool_name: str, parameters: Dict[str, Any]) -> Dict[str, 
         
         elif tool_name == "translator":
             return await tool_translator(parameters)
+
+        elif tool_name == "prompt_optimizer":
+            return await tool_prompt_optimizer(parameters)
+
+        elif tool_name == "code_reviewer":
+            return await tool_code_reviewer(parameters)
+
+        elif tool_name == "workflow_planner":
+            return await tool_workflow_planner(parameters)
         
         else:
             return {"error": f"Tool {tool_name} not found"}
@@ -361,13 +416,83 @@ async def tool_crypto_prices(params: Dict) -> Dict:
         return {"error": str(e)}
 
 async def tool_web_search(params: Dict) -> Dict:
-    """Simulated web search (can integrate real API)"""
-    query = params.get("query", "")
-    return {
-        "success": True,
-        "query": query,
-        "note": "Web search simulation - integrate DuckDuckGo/Brave API for real results"
+    """Real-time web search using DuckDuckGo HTML results"""
+    query = params.get("query", "").strip()
+    if not query:
+        return {"error": "Missing query for web search"}
+
+    # Restrict query length for stability
+    safe_query = query[:300]
+    url = f"https://html.duckduckgo.com/html/?q={quote_plus(safe_query)}"
+
+    headers = {
+        "User-Agent": "Mozilla/5.0 (compatible; ClaudeOpusSearchBot/1.0; +https://duckduckgo.com)",
+        "Accept-Language": "en-US,en;q=0.9"
     }
+
+    try:
+        async with aiohttp.ClientSession(headers=headers) as session:
+            async with session.get(url, timeout=aiohttp.ClientTimeout(total=12)) as response:
+                if response.status != 200:
+                    return {
+                        "error": f"Search request failed with status {response.status}",
+                        "query": safe_query
+                    }
+
+                html = await response.text()
+
+        # Parse top search results from DuckDuckGo HTML page
+        pattern = re.compile(
+            r'<a[^>]*class="result__a"[^>]*href="(?P<url>[^"]+)"[^>]*>(?P<title>.*?)</a>',
+            re.IGNORECASE | re.DOTALL
+        )
+
+        snippets_pattern = re.compile(
+            r'<a[^>]*class="result__snippet"[^>]*>(?P<snippet>.*?)</a>|'
+            r'<div[^>]*class="result__snippet"[^>]*>(?P<divsnippet>.*?)</div>',
+            re.IGNORECASE | re.DOTALL
+        )
+
+        raw_results = list(pattern.finditer(html))[:5]
+        raw_snippets = list(snippets_pattern.finditer(html))
+
+        results = []
+        for idx, match in enumerate(raw_results):
+            title = re.sub(r'<.*?>', '', match.group('title')).strip()
+            title = unescape(re.sub(r'\s+', ' ', title))
+
+            result_url = unescape(match.group('url').strip())
+
+            snippet = ""
+            if idx < len(raw_snippets):
+                snippet_match = raw_snippets[idx]
+                snippet_raw = snippet_match.group('snippet') or snippet_match.group('divsnippet') or ""
+                snippet = unescape(re.sub(r'\s+', ' ', re.sub(r'<.*?>', '', snippet_raw))).strip()
+
+            if title and result_url:
+                results.append({
+                    "title": title,
+                    "url": result_url,
+                    "snippet": snippet
+                })
+
+        if not results:
+            return {
+                "success": False,
+                "query": safe_query,
+                "results": [],
+                "note": "No search results parsed"
+            }
+
+        return {
+            "success": True,
+            "query": safe_query,
+            "results": results,
+            "provider": "duckduckgo-html",
+            "fetched_at": datetime.utcnow().isoformat() + "Z"
+        }
+    except Exception as e:
+        return {"error": f"Web search failed: {str(e)}", "query": safe_query}
 
 async def tool_weather(params: Dict) -> Dict:
     """Get weather information"""
@@ -398,6 +523,212 @@ async def tool_translator(params: Dict) -> Dict:
         "note": "Integrate Google Translate API or LibreTranslate"
     }
 
+
+async def tool_prompt_optimizer(params: Dict) -> Dict:
+    """Optimize user prompt for better autonomous coding outputs."""
+    prompt = params.get("prompt") or params.get("query") or ""
+    if not prompt.strip():
+        return {"error": "prompt is required"}
+
+    optimized = f"""You are a senior full-stack autonomous engineer.
+
+Task: {prompt.strip()}
+
+Output contract:
+1) PLAN
+2) FILE_TREE
+3) FILES (complete code, no placeholders)
+4) TESTS
+5) RUN_STEPS
+6) PREVIEW_STEPS
+7) DEPLOY_STEPS
+
+Quality bar:
+- production-ready architecture
+- input validation and error states
+- secure defaults
+- maintainable folder structure
+"""
+
+    return {
+        "success": True,
+        "optimized_prompt": optimized,
+        "improvements": [
+            "Added strict output contract",
+            "Enforced complete file generation",
+            "Added quality and security constraints"
+        ]
+    }
+
+
+async def tool_code_reviewer(params: Dict) -> Dict:
+    """Static review helper for code snippets."""
+    code = params.get("code", "")
+    language = params.get("language", "unknown")
+    if not code.strip():
+        return {"error": "code is required"}
+
+    findings = []
+    if "eval(" in code:
+        findings.append({"severity": "high", "issue": "Use of eval() can be dangerous", "fix": "Replace with safe parser or restricted evaluator"})
+    if "password" in code.lower() and "=" in code:
+        findings.append({"severity": "high", "issue": "Potential hardcoded secret", "fix": "Move secrets to environment variables"})
+    if "except Exception:" in code:
+        findings.append({"severity": "medium", "issue": "Broad exception handling", "fix": "Catch specific exception types"})
+    if "TODO" in code:
+        findings.append({"severity": "low", "issue": "Unresolved TODO present", "fix": "Resolve TODO before production"})
+
+    return {
+        "success": True,
+        "language": language,
+        "issues_found": len(findings),
+        "findings": findings,
+        "summary": "No major issues detected" if not findings else "Review completed with actionable findings"
+    }
+
+
+async def tool_workflow_planner(params: Dict) -> Dict:
+    """Create phase-wise execution workflow for complex app requests."""
+    goal = params.get("goal") or params.get("query") or ""
+    constraints = params.get("constraints", "")
+    if not goal.strip():
+        return {"error": "goal is required"}
+
+    phases = [
+        {"phase": "Discovery", "deliverable": "requirements doc + user stories"},
+        {"phase": "Architecture", "deliverable": "system design + folder structure"},
+        {"phase": "Implementation", "deliverable": "frontend/backend code with validations"},
+        {"phase": "Verification", "deliverable": "tests, lint, quality checks"},
+        {"phase": "Preview & Deploy", "deliverable": "playground preview and deployment checklist"}
+    ]
+    return {
+        "success": True,
+        "goal": goal,
+        "constraints": constraints,
+        "phases": phases
+    }
+
+def detect_app_builder_intent(message: str) -> bool:
+    """Detect if user wants autonomous app-building support"""
+    message_lower = message.lower()
+    app_keywords = [
+        "build app", "create app", "full stack", "frontend", "backend", "saas",
+        "dashboard", "admin panel", "landing page", "deploy", "preview", "scaffold",
+        "app developer", "lovable", "bolt", "cursor", "react app", "next.js",
+        "app banao", "app banado", "app develop", "project bana", "preview dikhao"
+    ]
+    return any(k in message_lower for k in app_keywords)
+
+
+def create_app_build_strategy(
+    question: str,
+    target_framework: str = "react",
+    include_backend: bool = True,
+    ui_library: str = "tailwind",
+    deployment_target: str = "render",
+    generate_tests: bool = True
+) -> Dict[str, Any]:
+    """Generate a reusable app-building strategy similar to autonomous builders."""
+    backend_stack = "FastAPI + PostgreSQL" if include_backend else "Frontend only"
+    framework_key = (target_framework or "react").lower()
+    framework_defaults = APP_BUILD_TEMPLATES.get(framework_key, APP_BUILD_TEMPLATES["react"])
+    scaffold = generate_scaffold_files(question, framework_key, include_backend, generate_tests)
+    return {
+        "mode": "autonomous_app_builder",
+        "framework": framework_key,
+        "ui_library": ui_library,
+        "deployment_target": deployment_target,
+        "framework_defaults": framework_defaults,
+        "backend": backend_stack,
+        "generate_tests": generate_tests,
+        "scaffold_files": scaffold,
+        "delivery_strategy": [
+            "Clarify product scope, users, and success criteria",
+            "Design feature roadmap: MVP -> v1 -> scale",
+            "Generate complete file tree with production defaults",
+            "Implement end-to-end flows (UI, API, state, validation)",
+            "Provide test commands and run instructions",
+            "Provide preview instructions for playground/HTML rendering"
+        ],
+        "required_output_format": {
+            "sections": ["PLAN", "FILE_TREE", "FILES", "RUN_STEPS", "PREVIEW_STEPS", "NEXT_IMPROVEMENTS"],
+            "file_block_format": "Use markdown code fences with full relative filepath as heading"
+        },
+        "goal": question[:500]
+    }
+
+
+def generate_scaffold_files(product_idea: str, framework: str, include_backend: bool, generate_tests: bool = True) -> Dict[str, str]:
+    """Generate starter scaffold files that can be rendered in a playground preview."""
+    app_title = re.sub(r'[^a-zA-Z0-9\s-]', '', product_idea).strip()[:50] or "Generated App"
+
+    files = {
+        "README.generated.md": f"# {app_title}\n\nGenerated by Claude Opus autonomous app-builder mode.\n",
+        "frontend/index.html": """<!doctype html>
+<html>
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>App Preview</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+  </head>
+  <body class="bg-slate-950 text-slate-100">
+    <div id="root" class="p-8"></div>
+    <script type="module" src="./main.js"></script>
+  </body>
+</html>""",
+        "frontend/main.js": f"""const root = document.getElementById('root');
+root.innerHTML = `
+  <main class="max-w-4xl mx-auto">
+    <h1 class="text-3xl font-bold mb-4">{app_title}</h1>
+    <p class="text-slate-300">Live preview scaffold generated for {framework} workflow.</p>
+    <section class="mt-6 p-4 rounded-xl border border-slate-700">
+      <h2 class="font-semibold">Next step</h2>
+      <p class="text-sm text-slate-400 mt-2">Replace this scaffold with generated component files from the FILES section.</p>
+    </section>
+  </main>
+`;
+"""
+    }
+
+    if include_backend:
+        files["backend/main.py"] = """from fastapi import FastAPI
+
+app = FastAPI(title="Generated App API")
+
+@app.get("/health")
+async def health():
+    return {"status": "ok"}
+"""
+
+    if generate_tests:
+        files["tests/smoke_test.md"] = "Run frontend preview and verify health endpoint responds with 200."
+
+    return files
+
+
+def create_execution_checklist(framework: str, deployment_target: str) -> List[str]:
+    return [
+        f"Initialize {framework} project structure in your playground workspace",
+        "Paste FILE_TREE and FILES outputs exactly as generated",
+        "Run lint + tests before preview",
+        "Start dev server and verify HTML preview rendering",
+        f"Deploy preview build to {deployment_target} after local pass",
+        "Integrate CI checks for type, lint, and unit tests"
+    ]
+
+
+def validate_blueprint_quality(text: str) -> Dict[str, Any]:
+    required_sections = ["PLAN", "FILE_TREE", "FILES", "RUN_STEPS", "PREVIEW_STEPS", "NEXT_IMPROVEMENTS"]
+    present = [section for section in required_sections if section in text]
+    score = round(len(present) / len(required_sections), 2)
+    return {
+        "quality_score": score,
+        "missing_sections": [s for s in required_sections if s not in present],
+        "is_production_ready_format": score >= 0.85
+    }
+
+
 def detect_required_tools(message: str) -> List[str]:
     """
     Automatically detect which tools are needed
@@ -413,6 +744,15 @@ def detect_required_tools(message: str) -> List[str]:
     # Crypto
     if any(k in message_lower for k in ['bitcoin', 'ethereum', 'crypto', 'btc', 'eth', 'price']):
         tools.append("crypto_prices")
+
+    # Web search (real-time information)
+    web_keywords = [
+        'latest', 'news', 'today', 'current', 'update', 'trend', 'who won',
+        'web search', 'search', 'google', 'internet', 'real time',
+        'अभी', 'आज', 'ताज़ा', 'लेटेस्ट', 'खोज'
+    ]
+    if any(k in message_lower for k in web_keywords):
+        tools.append("web_search")
     
     # Weather
     if any(k in message_lower for k in ['weather', 'temperature', 'forecast', 'मौसम']):
@@ -425,8 +765,26 @@ def detect_required_tools(message: str) -> List[str]:
     # Code execution
     if 'execute' in message_lower and 'code' in message_lower:
         tools.append("code_executor")
+
+    # Prompt optimizer
+    if any(k in message_lower for k in ['improve prompt', 'optimize prompt', 'better prompt', 'prompt engineering']):
+        tools.append("prompt_optimizer")
+
+    # Code reviewer
+    if any(k in message_lower for k in ['review code', 'code review', 'security audit', 'bug audit']):
+        tools.append("code_reviewer")
+
+    # Workflow planner
+    if any(k in message_lower for k in ['workflow', 'roadmap', 'execution plan', 'step by step plan']):
+        tools.append("workflow_planner")
+
+    # App architect mode
+    if detect_app_builder_intent(message):
+        tools.append("app_architect")
+        if "web_search" not in tools:
+            tools.append("web_search")
     
-    return tools
+    return list(dict.fromkeys(tools))
 
 # ============================================================================
 # Vision Analysis Functions
@@ -517,7 +875,14 @@ async def get_opus_enhanced_response(
     reasoning_depth: ReasoningDepth = ReasoningDepth.STANDARD,
     enable_vision: bool = False,
     enable_tools: bool = True,
-    image_base64: Optional[str] = None
+    image_base64: Optional[str] = None,
+    app_builder_mode: bool = False,
+    target_framework: str = "react",
+    include_backend: bool = True,
+    ui_library: str = "tailwind",
+    deployment_target: str = "render",
+    generate_tests: bool = True,
+    preferred_language: str = "hinglish"
 ) -> Dict[str, Any]:
     """
     Generate response with all Claude Opus 4.5 features:
@@ -539,6 +904,17 @@ async def get_opus_enhanced_response(
     
     # Create reasoning chain
     reasoning_steps = create_reasoning_chain(reasoning_depth)
+
+    # App builder strategy (Lovable-style autonomous building)
+    inferred_app_mode = app_builder_mode or detect_app_builder_intent(question)
+    app_build_strategy = create_app_build_strategy(
+        question,
+        target_framework=target_framework,
+        include_backend=include_backend,
+        ui_library=ui_library,
+        deployment_target=deployment_target,
+        generate_tests=generate_tests
+    ) if inferred_app_mode else None
     
     # Detect and prepare tools
     tools_to_use = []
@@ -556,8 +932,19 @@ async def get_opus_enhanced_response(
                 expr_match = re.search(r'[\d\+\-\*/\(\)\s]+', question)
                 if expr_match:
                     params = {"expression": expr_match.group()}
+            elif tool_name == "prompt_optimizer":
+                params = {"prompt": question}
+            elif tool_name == "workflow_planner":
+                params = {"goal": question, "constraints": "production-ready, preview-compatible"}
             
-            result = await execute_tool(tool_name, params)
+            if tool_name == "app_architect":
+                result = {
+                    "success": True,
+                    "strategy": app_build_strategy,
+                    "note": "Use this strategy to generate production-grade app files and preview flow"
+                }
+            else:
+                result = await execute_tool(tool_name, params)
             tool_results[tool_name] = result
     
     # Vision analysis if enabled
@@ -567,7 +954,19 @@ async def get_opus_enhanced_response(
     
     # Build enhanced system prompt
     time_info = datetime.utcnow() + timedelta(hours=5, minutes=30)
+    language_mode = (preferred_language or conversations[user_id]["context"].get("language", "hinglish")).lower()
+    conversations[user_id]["context"]["language"] = language_mode
     
+    app_builder_instructions = """
+App Builder Mode Instructions:
+- Behave like a top-tier autonomous app builder (Lovable-style execution quality)
+- Return output strictly in this order: PLAN, FILE_TREE, FILES, RUN_STEPS, PREVIEW_STEPS, NEXT_IMPROVEMENTS
+- In FILES section, provide complete code for critical files (no placeholders like '...')
+- Prefer production-ready patterns: modular architecture, env config, error handling, loading/error UI states
+- Ensure the generated app can run in a playground and render preview HTML quickly
+- Mention exactly how user can wire this API output into their code-preview pipeline
+""" if inferred_app_mode else ""
+
     system_prompt = f"""You are Claude Opus 4.5, Anthropic's most advanced AI assistant.
 
 Current Capabilities Activated:
@@ -595,6 +994,10 @@ Instructions:
 - Write naturally with human-like nuance
 - Utilize tool results when relevant
 - Support Hindi, Hinglish, and all languages fluently
+- Default response language mode: {language_mode}
+- If language_mode is "hinglish", respond in natural Hinglish by default unless user asks otherwise
+
+{app_builder_instructions}
 
 Provide a thoughtful, comprehensive, and accurate response."""
 
@@ -642,7 +1045,9 @@ Provide a thoughtful, comprehensive, and accurate response."""
                         "tools_used": tools_to_use,
                         "confidence_score": confidence,
                         "fact_checked": is_verified,
-                        "vision_analysis": bool(vision_context)
+                        "vision_analysis": bool(vision_context),
+                        "build_mode": inferred_app_mode,
+                        "build_artifacts": app_build_strategy
                     }
                 
                 return {
@@ -675,7 +1080,11 @@ async def home():
             "tool_use": "✅ Autonomous tool execution",
             "fact_checking": "✅ Reduced hallucinations",
             "nuanced_writing": "✅ Human-like responses",
-            "multi_language": "✅ Hindi, Hinglish, 100+ languages"
+            "multi_language": "✅ Hindi, Hinglish, 100+ languages",
+            "autonomous_app_builder": "✅ Lovable-style app planning + scaffolding strategy",
+            "prompt_optimizer": "✅ Automatic prompt hardening for better code generation",
+            "code_review_assistant": "✅ Built-in code quality/security review",
+            "workflow_planning": "✅ Multi-phase execution planning"
         },
         "available_tools": AVAILABLE_TOOLS,
         "endpoints": {
@@ -683,6 +1092,11 @@ async def home():
             "/vision": "Image analysis with Q&A",
             "/deep-reasoning": "Complex problem solving",
             "/execute-tool": "Direct tool execution",
+            "/build-app": "Generate full app plan + production-ready file outputs",
+            "/build-app/templates": "List supported frameworks, UI libraries, and deployment defaults",
+            "/build-app/validate": "Validate blueprint structure quality for playground execution",
+            "/workflow-plan": "Generate phased execution plan for complex builds",
+            "/memory/{user_id}": "Export conversation memory for debugging and analytics",
             "/health": "System health check"
         }
     }
@@ -699,7 +1113,14 @@ async def chat_endpoint(request: ChatRequest):
             reasoning_depth=request.reasoning_depth,
             enable_vision=request.enable_vision,
             enable_tools=request.enable_tools,
-            image_base64=request.image_base64
+            image_base64=request.image_base64,
+            app_builder_mode=request.app_builder_mode,
+            target_framework=request.target_framework,
+            include_backend=request.include_backend,
+            ui_library="tailwind",
+            deployment_target="render",
+            generate_tests=True,
+            preferred_language=request.preferred_language or "hinglish"
         )
         
         if not result["success"]:
@@ -714,6 +1135,8 @@ async def chat_endpoint(request: ChatRequest):
             tools_used=result["tools_used"],
             confidence_score=result["confidence_score"],
             fact_checked=result["fact_checked"],
+            build_mode=result.get("build_mode", False),
+            build_artifacts=result.get("build_artifacts"),
             timestamp=datetime.now().isoformat()
         )
     
@@ -765,6 +1188,132 @@ async def deep_reasoning(request: DeepReasoningRequest):
     
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/build-app")
+async def build_app_endpoint(request: AppBuildRequest):
+    """
+    Dedicated autonomous app-builder endpoint (Lovable-style strategy)
+    """
+    try:
+        enriched_prompt = f"""Build a production-grade application with this idea:
+{request.product_idea}
+
+Constraints:
+- Framework: {request.target_framework}
+- Include backend: {request.include_backend}
+- Include auth: {request.include_auth}
+- UI Library: {request.ui_library}
+- Deployment target: {request.deployment_target}
+- Generate tests: {request.generate_tests}
+- Output should be directly usable for playground code-to-preview workflow."""
+
+        result = await get_opus_enhanced_response(
+            question=enriched_prompt,
+            user_id=request.user_id,
+            reasoning_depth=ReasoningDepth.EXPERT,
+            enable_tools=True,
+            app_builder_mode=True,
+            target_framework=request.target_framework or "react",
+            include_backend=bool(request.include_backend),
+            ui_library=request.ui_library or "tailwind",
+            deployment_target=request.deployment_target or "render",
+            generate_tests=bool(request.generate_tests),
+            preferred_language="hinglish"
+        )
+
+        if not result.get("success"):
+            raise HTTPException(status_code=500, detail=result.get("error", "Failed to build app"))
+
+        blueprint_text = result.get("response", "")
+        quality_report = validate_blueprint_quality(blueprint_text)
+        execution_checklist = create_execution_checklist(
+            request.target_framework or "react",
+            request.deployment_target or "render"
+        )
+
+        return {
+            "success": True,
+            "mode": "autonomous_app_builder",
+            "strategy": result.get("build_artifacts"),
+            "blueprint": blueprint_text,
+            "quality_report": quality_report,
+            "execution_checklist": execution_checklist,
+            "tools_used": result.get("tools_used", []),
+            "confidence": result.get("confidence_score"),
+            "timestamp": datetime.now().isoformat()
+        }
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/build-app/templates")
+async def build_app_templates():
+    """Return supported templates for autonomous app-builder mode."""
+    return {
+        "success": True,
+        "templates": APP_BUILD_TEMPLATES,
+        "default_framework": "react",
+        "default_ui_library": "tailwind",
+        "default_deployment": "render",
+        "timestamp": datetime.now().isoformat()
+    }
+
+
+@app.post("/build-app/validate")
+async def validate_build_blueprint(payload: Dict[str, str]):
+    """Validate generated blueprint format quality."""
+    blueprint = payload.get("blueprint", "")
+    if not blueprint:
+        raise HTTPException(status_code=400, detail="blueprint is required")
+
+    report = validate_blueprint_quality(blueprint)
+    return {
+        "success": True,
+        "report": report,
+        "timestamp": datetime.now().isoformat()
+    }
+
+
+@app.post("/workflow-plan")
+async def workflow_plan_endpoint(request: WorkflowPlanRequest):
+    """Generate execution workflow plan for complex app development goals."""
+    try:
+        plan = await tool_workflow_planner({
+            "goal": request.goal,
+            "constraints": request.constraints,
+            "tech_stack": request.tech_stack
+        })
+        if not plan.get("success"):
+            raise HTTPException(status_code=400, detail=plan.get("error", "Failed to generate workflow"))
+
+        return {
+            "success": True,
+            "goal": request.goal,
+            "tech_stack": request.tech_stack,
+            "workflow": plan.get("phases", []),
+            "timestamp": datetime.now().isoformat()
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/memory/{user_id}")
+async def get_memory(user_id: str):
+    """Export memory/context for a specific user conversation."""
+    if user_id not in conversations:
+        raise HTTPException(status_code=404, detail="User conversation not found")
+
+    conv = conversations[user_id]
+    return {
+        "success": True,
+        "user_id": user_id,
+        "metadata": conv.get("metadata", {}),
+        "context": conv.get("context", {}),
+        "recent_messages": conv.get("messages", [])[-10:],
+        "timestamp": datetime.now().isoformat()
+    }
+
 
 @app.post("/execute-tool")
 async def execute_tool_endpoint(request: ToolExecutionRequest):
